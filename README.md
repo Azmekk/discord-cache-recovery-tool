@@ -13,8 +13,6 @@ gifs that are still visible in your favourite gifs tab but the links to them lea
 2. Place it in a folder where you want to dump all the files
 3. Run the executable file.
 
-## Help
-
 ## FAQ
 
 ### Q: Is this a virus?
