@@ -4,7 +4,7 @@ This tool is designed to help recover lost media files from the Discord cache fo
 
 ## Description
 
-The Discord Cache Recovery Tool is a simple application that reads through the Discord cache folder and organizes the media files into respective folders based on extension. It is highly useful for lost images or gifs that are still somewhere visible on your discord client, however their source has disappeared. E.g.
+The Discord Cache Recovery Tool is a simple application that reads through the Discord cache folder and organizes the media files into respective folders based on their extension. It is highly useful for lost images or gifs that are still somewhere on your discord client, however their source has disappeared. E.g.
 gifs that are still visible in your favourite gifs tab but the links to them lead to an empty/deleted page.
 
 ## Usage
