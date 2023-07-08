@@ -9,7 +9,7 @@ gifs that are still visible in your favourite gifs tab but the links to them lea
 
 ## Usage
 
-1. Download the exe file from the latest release.
+1. Download the exe file from the [latest release](https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest).
 2. Place it in a folder where you want to dump all the files
 3. Run the executable file.
 
