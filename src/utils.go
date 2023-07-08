@@ -35,7 +35,7 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	fileExtension := fileExtensions[0]
 
 	saveDir := getSaveDirAndCreateIfNotExists(exeDir, fileExtension)
-	sameFileAlreadyExists, newFilePath := GetNewFilePathIfFileDoesNotExist(buffer, saveDir, fileInfo.Name(), fileExtension, 0)
+	sameFileAlreadyExists, newFilePath := getNewFilePath(buffer, saveDir, fileInfo.Name(), fileExtension, 0)
 
 	if sameFileAlreadyExists {
 		return
@@ -70,7 +70,7 @@ func isSameFile(buffer []byte, existingFilePath string) bool {
 	}
 }
 
-func GetNewFilePathIfFileDoesNotExist(buffer []byte, saveDir string, fileName string, fileExtension string, depth int) (bool, string) {
+func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtension string, depth int) (bool, string) {
 	depth++
 	filePath := fmt.Sprintf("%s\\%s%s", saveDir, fileName, fileExtension)
 
@@ -80,7 +80,7 @@ func GetNewFilePathIfFileDoesNotExist(buffer []byte, saveDir string, fileName st
 		return true, ""
 	} else if fileNameAlreadyExists {
 		fileName = fmt.Sprintf("%s_%d", fileName, depth)
-		return GetNewFilePathIfFileDoesNotExist(buffer, saveDir, fileName, fileExtension, depth)
+		return getNewFilePath(buffer, saveDir, fileName, fileExtension, depth)
 	}
 
 	return false, filePath
