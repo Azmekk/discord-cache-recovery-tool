@@ -28,8 +28,8 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	filePath := filepath.Join(discordCacheFolder, fileInfo.Name())
 	exeDir := getExeDir()
 	buffer := getFileBuffer(filePath, fileInfo)
-	fileType, isUnknownFileType := getFileMimeType(buffer)
-	if isUnknownFileType {
+	fileType, unknownFileTypeErr := getFileMimeType(buffer)
+	if unknownFileTypeErr != nil {
 		return
 	} else if fileType == "application/octet-stream" {
 		return
@@ -163,15 +163,15 @@ func getDiscordCacheFolderBasedOnOS() string {
 	}
 }
 
-func getFileMimeType(fileBytes []byte) (string, bool) {
+func getFileMimeType(fileBytes []byte) (string, error) {
 	if runtime.GOOS == "windows" {
-		return mimetype.Detect(fileBytes).String(), false
+		return mimetype.Detect(fileBytes).String(), nil
 	} else {
 		kind, _ := filetype.Match(fileBytes)
 		if kind == filetype.Unknown {
-			return "", true
+			return "", fmt.Errorf("Unknown file type")
 		}
 
-		return kind.MIME.Value, false
+		return kind.MIME.Value, nil
 	}
 }
