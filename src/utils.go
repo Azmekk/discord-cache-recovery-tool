@@ -140,3 +140,18 @@ func getSaveDirAndCreateIfNotExists(exeDir string, fileExtension string) string 
 
 	return saveDir
 }
+
+func getDiscordCacheFolderBasedOnOS() string{
+	operatingSystem := runtime.GOOS
+		if operatingSystem == "windows" {
+			return filepath.Join(os.Getenv("APPDATA"), "discord/Cache/Cache_Data")
+		} else if operatingSystem == "darwin" {
+			return filepath.Join(os.Getenv("HOME"), "Library/Application Support/discord/Cache/Cache_Data")
+		} else if operatingSystem == "linux" {
+			return filepath.Join(os.Getenv("HOME"), ".config/discord/Cache/Cache_Data")
+		} else {
+			fmt.Println("Unrecognized OS")
+			os.Exit(1)
+			return ""
+		}
+}
