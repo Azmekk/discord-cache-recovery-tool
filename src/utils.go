@@ -6,10 +6,12 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"mime"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/gabriel-vasile/mimetype"
+	"github.com/h2non/filetype"
 )
 
 func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
@@ -26,7 +28,12 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	filePath := filepath.Join(discordCacheFolder, fileInfo.Name())
 	exeDir := getExeDir()
 	buffer := getFileBuffer(filePath, fileInfo)
-	fileType := http.DetectContentType(buffer)
+	fileType, isUnknownFileType := getFileMimeType(buffer)
+	if isUnknownFileType {
+		return
+	} else if fileType == "application/octet-stream" {
+		return
+	}
 	fileExtensions := getFileExtensions(fileType, filePath)
 
 	if len(fileExtensions) == 0 {
@@ -72,7 +79,7 @@ func isSameFile(buffer []byte, existingFilePath string) bool {
 
 func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtension string, depth int) (bool, string) {
 	depth++
-	filePath := fmt.Sprintf("%s\\%s%s", saveDir, fileName, fileExtension)
+	filePath := filepath.Join(saveDir, fileName+fileExtension)
 
 	fileNameAlreadyExists := doesFileNameExist(filePath)
 
@@ -130,7 +137,7 @@ func getFileExtensions(fileType string, filePath string) []string {
 }
 
 func getSaveDirAndCreateIfNotExists(exeDir string, fileExtension string) string {
-	saveDir := fmt.Sprintf("%s\\%s", exeDir, fileExtension[1:])
+	saveDir := filepath.Join(exeDir, fileExtension[1:])
 	_, err := os.Stat(saveDir)
 	if os.IsNotExist(err) {
 		os.Mkdir(saveDir, 0755)
@@ -153,5 +160,18 @@ func getDiscordCacheFolderBasedOnOS() string {
 		fmt.Println("Unrecognized OS")
 		os.Exit(1)
 		return ""
+	}
+}
+
+func getFileMimeType(fileBytes []byte) (string, bool) {
+	if runtime.GOOS == "windows" {
+		return mimetype.Detect(fileBytes).String(), false
+	} else {
+		kind, _ := filetype.Match(fileBytes)
+		if kind == filetype.Unknown {
+			return "", true
+		}
+
+		return kind.MIME.Value, false
 	}
 }
