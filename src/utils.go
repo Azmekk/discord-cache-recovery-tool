@@ -107,7 +107,7 @@ func getFileBuffer(filePath string, fileInfo fs.FileInfo) []byte {
 	}
 	defer file.Close()
 
-	buffer := make([]byte, fileInfo.Size()) // Buffer to read the file content
+	buffer := make([]byte, fileInfo.Size())
 	_, err = file.Read(buffer)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Error reading file %s: %s", filePath, err))
