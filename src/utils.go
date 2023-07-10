@@ -168,21 +168,22 @@ func getFileMimeType(buffer []byte) (string, error, int) {
 	if runtime.GOOS == "windows" {
 		return mimetype.Detect(buffer).String(), nil, 0
 	} else {
-		return detectUnixFileMIMEType(buffer, 0)
+		return detectUnixFileMIMEType(buffer)
 	}
 }
 
-func detectUnixFileMIMEType(buffer []byte, depth int) (string, error, int) {
-	kind, _ := filetype.Match(buffer[depth:])
+func detectUnixFileMIMEType(buffer []byte) (string, error, int) {
+	for i := 0; i < 400; i++ {
+		if i >= len(buffer) {
+			break
+		}
 
-	if depth == len(buffer) {
-		return "", fmt.Errorf("Unknown filetype"), 0
-	} else if kind == filetype.Unknown && depth < 400 {
-		depth++
-		return detectUnixFileMIMEType(buffer, depth)
-	} else if kind == filetype.Unknown {
-		return "", fmt.Errorf("Unknown filetype"), 0
-	} else {
-		return kind.MIME.Value, nil, depth
+		kind, _ := filetype.Match(buffer[i:])
+
+		if kind != filetype.Unknown {
+			return kind.MIME.Value, nil, i
+		}
 	}
+
+	return "", fmt.Errorf("Unknown filetype"), 0
 }
