@@ -27,7 +27,7 @@ A: The app will only recover whatever is still available in the discord cache. I
 ### Q: Can it look for a specific file?
 A: It would be too complicated to map cache to the respective files in the discord client so it will simply dump all the media for you to find. You can probably narrow the search by searching for the specific flie in the proper folder based on the file's extension. E.g gif.
 
-## Contributors
+## Collaborators
 
 [@ggatesdew](https://github.com/ggatesdew) - Testing on macOS
 
