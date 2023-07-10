@@ -9,8 +9,7 @@ gifs that are still visible in your favourite gifs tab but the links to them lea
 
 ## Usage
 
-### Currently only works on Windows due to how discord cache is stored on linux/unix based operating systems
-1. Download the file ~for your OS~ from the [latest release](https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest). 
+1. Download the respective file for your operating system from the [latest release](https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest). 
 2. Place it in a folder where you want to dump all the files
 3. Run the file by either double clicking on it or using a terminal.
 
