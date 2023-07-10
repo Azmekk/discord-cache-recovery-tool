@@ -163,15 +163,25 @@ func getDiscordCacheFolderBasedOnOS() string {
 	}
 }
 
-func getFileMimeType(fileBytes []byte) (string, error) {
+func getFileMimeType(buffer []byte) (string, error) {
 	if runtime.GOOS == "windows" {
-		return mimetype.Detect(fileBytes).String(), nil
+		return mimetype.Detect(buffer).String(), nil
 	} else {
-		kind, _ := filetype.Match(fileBytes)
-		if kind == filetype.Unknown {
-			return "", fmt.Errorf("Unknown file type")
-		}
+		return detectUnixFileMIMEType(buffer, 0)
+	}
+}
 
+func detectUnixFileMIMEType(buffer []byte, depth int) (string, error) {
+	kind, _ := filetype.Match(buffer[depth:])
+
+	if depth == len(buffer) {
+		return "", fmt.Errorf("Unknown filetype")
+	} else if kind == filetype.Unknown && depth < 400 {
+		depth++
+		return detectUnixFileMIMEType(buffer, depth)
+	} else if kind == filetype.Unknown {
+		return "", fmt.Errorf("Unknown filetype")
+	} else {
 		return kind.MIME.Value, nil
 	}
 }
