@@ -28,7 +28,8 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	filePath := filepath.Join(discordCacheFolder, fileInfo.Name())
 	exeDir := getExeDir()
 	buffer := getFileBuffer(filePath, fileInfo)
-	fileType, unknownFileTypeErr := getFileMimeType(buffer)
+	fileType, unknownFileTypeErr, firstFileByte := getFileMimeType(buffer)
+	buffer = buffer[firstFileByte:]
 	if unknownFileTypeErr != nil {
 		return
 	} else if fileType == "application/octet-stream" {
@@ -163,25 +164,25 @@ func getDiscordCacheFolderBasedOnOS() string {
 	}
 }
 
-func getFileMimeType(buffer []byte) (string, error) {
+func getFileMimeType(buffer []byte) (string, error, int) {
 	if runtime.GOOS == "windows" {
-		return mimetype.Detect(buffer).String(), nil
+		return mimetype.Detect(buffer).String(), nil, 0
 	} else {
 		return detectUnixFileMIMEType(buffer, 0)
 	}
 }
 
-func detectUnixFileMIMEType(buffer []byte, depth int) (string, error) {
+func detectUnixFileMIMEType(buffer []byte, depth int) (string, error, int) {
 	kind, _ := filetype.Match(buffer[depth:])
 
 	if depth == len(buffer) {
-		return "", fmt.Errorf("Unknown filetype")
+		return "", fmt.Errorf("Unknown filetype"), 0
 	} else if kind == filetype.Unknown && depth < 400 {
 		depth++
 		return detectUnixFileMIMEType(buffer, depth)
 	} else if kind == filetype.Unknown {
-		return "", fmt.Errorf("Unknown filetype")
+		return "", fmt.Errorf("Unknown filetype"), 0
 	} else {
-		return kind.MIME.Value, nil
+		return kind.MIME.Value, nil, depth
 	}
 }
