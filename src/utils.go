@@ -152,7 +152,13 @@ func getSaveDirAndCreateIfNotExists(exeDir string, fileExtension string) string 
 func getDiscordCacheFolderBasedOnOS() string {
 	operatingSystem := runtime.GOOS
 	if operatingSystem == "windows" {
-		return filepath.Join(os.Getenv("APPDATA"), "discord/Cache/Cache_Data")
+		userConfigDir, err := os.UserConfigDir()
+		if err != nil {
+			fmt.Println("Something went wrong when grabbing the user directory :", err)
+			os.Exit(1)
+			return ""
+		}
+		return filepath.Join(userConfigDir, "discord/Cache/Cache_Data")
 	} else if operatingSystem == "darwin" {
 		return filepath.Join(os.Getenv("HOME"), "Library/Application Support/discord/Cache/Cache_Data")
 	} else if operatingSystem == "linux" {
