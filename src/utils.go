@@ -154,15 +154,27 @@ func getDiscordCacheFolderBasedOnOS() string {
 	if operatingSystem == "windows" {
 		userConfigDir, err := os.UserConfigDir()
 		if err != nil {
-			fmt.Println("Something went wrong when grabbing the user directory :", err)
+			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
 			os.Exit(1)
 			return ""
 		}
 		return filepath.Join(userConfigDir, "discord/Cache/Cache_Data")
 	} else if operatingSystem == "darwin" {
-		return filepath.Join(os.Getenv("HOME"), "Library/Application Support/discord/Cache/Cache_Data")
+		userHomeDir, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
+			os.Exit(1)
+			return ""
+		}
+		return filepath.Join(userHomeDir, "Library/Application Support/discord/Cache/Cache_Data")
 	} else if operatingSystem == "linux" {
-		return filepath.Join(os.Getenv("HOME"), ".config/discord/Cache/Cache_Data")
+		userHomeDir, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
+			os.Exit(1)
+			return ""
+		}
+		return filepath.Join(userHomeDir, ".config/discord/Cache/Cache_Data")
 	} else {
 		fmt.Println("Unrecognized OS")
 		os.Exit(1)
