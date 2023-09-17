@@ -25,4 +25,6 @@ func main() {
 	}
 
 	fmt.Println("Done!")
+	fmt.Println("You can close the window or press enter to exit...")
+	fmt.Scanln()
 }
