@@ -2,17 +2,23 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
-	"mime"
 	"os"
 	"path/filepath"
 	"runtime"
 
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/h2non/filetype"
 )
+
+type cachedFileData struct {
+	fileExtension string
+	startingByte  int
+}
+
+var knownUnreadableFiles = [...]string{"index", "data_0", "data_1", "data_2", "data_3"}
+var exeDir string = getExeDir()
 
 func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	if fileInfo.IsDir() {
@@ -26,49 +32,51 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 	}
 
 	filePath := filepath.Join(discordCacheFolder, fileInfo.Name())
-	exeDir := getExeDir()
-	buffer := getFileBuffer(filePath, fileInfo)
-	fileType, unknownFileTypeErr, firstFileByte := getFileMimeType(buffer)
-	buffer = buffer[firstFileByte:]
-	if unknownFileTypeErr != nil {
-		return
-	} else if fileType == "application/octet-stream" {
-		return
-	}
-	fileExtensions := getFileExtensions(fileType, filePath)
 
-	if len(fileExtensions) == 0 {
-		return
-	}
-	fileExtension := fileExtensions[0]
-
-	saveDir := getSaveDirAndCreateIfNotExists(exeDir, fileExtension)
-	sameFileAlreadyExists, newFilePath := getNewFilePath(buffer, saveDir, fileInfo.Name(), fileExtension, 0)
-
-	if sameFileAlreadyExists {
-		return
-	}
-
-	err := ioutil.WriteFile(newFilePath, buffer, 0644)
+	buffer, err := getFileBuffer(filePath, fileInfo)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error writing file %s:%s", filePath, err))
+		fmt.Println("Could not read buffer for file: ", fileInfo.Name())
+		return
+	}
+
+	fileData, err := getNewFileData(buffer)
+
+	if err != nil && err.Error() == "unknown filetype" {
+		return
+	}
+
+	if err != nil {
+		fmt.Println("Encountered error while trying to determine file type for file: ", fileInfo.Name())
+		return
+	}
+
+	saveDir := getOrCreateSaveDir(exeDir, fileData.fileExtension)
+
+	buffer = buffer[fileData.startingByte:]
+	fileExists, newFilePath := getNewFilePath(buffer, saveDir, fileInfo.Name(), fileData.fileExtension)
+
+	if fileExists {
+		return
+	}
+
+	err = os.WriteFile(newFilePath, buffer, 0644)
+	if err != nil {
+
+		fmt.Println("Error writing file: ", filePath, " due to err: ", err)
 		return
 	}
 }
 
-func doesFileNameExist(filePath string) bool {
+func fileNameExists(filePath string) bool {
 	_, err := os.Stat(filePath)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return true
+	return !os.IsNotExist(err)
 }
 
 func isSameFile(buffer []byte, existingFilePath string) bool {
-	fileData, err := ioutil.ReadFile(existingFilePath)
+	fileData, err := os.ReadFile(existingFilePath)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error reading file to compare with buffer %s: %s", existingFilePath, err))
-		os.Exit(1)
+		fmt.Println("Error reading file: ", existingFilePath, "to compare with buffer due to err: ", err)
+		return true
 	}
 
 	if bytes.Equal(fileData, buffer) {
@@ -78,67 +86,53 @@ func isSameFile(buffer []byte, existingFilePath string) bool {
 	}
 }
 
-func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtension string, depth int) (bool, string) {
-	depth++
-	filePath := filepath.Join(saveDir, fileName+fileExtension)
+func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtension string) (bool, string) {
+	filePath := filepath.Join(saveDir, fmt.Sprintf("%s.%s", fileName, fileExtension))
 
-	fileNameAlreadyExists := doesFileNameExist(filePath)
-
-	if fileNameAlreadyExists && isSameFile(buffer, filePath) {
+	if fileNameExists(filePath) && isSameFile(buffer, filePath) {
 		return true, ""
-	} else if fileNameAlreadyExists {
-		fileName = fmt.Sprintf("%s_%d", fileName, depth)
-		return getNewFilePath(buffer, saveDir, fileName, fileExtension, depth)
+	}
+
+	i := 0
+	for fileNameExists(filePath) {
+		i++
+		filePath = fmt.Sprintf("%d_%s", i, filePath)
 	}
 
 	return false, filePath
 }
 
-func detectOS() string {
-	os := runtime.GOOS
-	return os
-}
-
-func getFileBuffer(filePath string, fileInfo fs.FileInfo) []byte {
+func getFileBuffer(filePath string, fileInfo fs.FileInfo) ([]byte, error) {
 	file, err := os.Open(filePath)
+
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error opening file %s: %s", filePath, err))
-		os.Exit(1)
+		fmt.Println("Error opening file: ", filePath, " due to err: ", err)
+		return nil, errors.New("")
 	}
 	defer file.Close()
 
 	buffer := make([]byte, fileInfo.Size())
 	_, err = file.Read(buffer)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error reading file %s: %s", filePath, err))
-		os.Exit(1)
+		fmt.Println("Error reading file: ", filePath, " due to err: ", err)
+		return nil, errors.New("")
 	}
 
-	return buffer
+	return buffer, nil
 }
 
 func getExeDir() string {
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Error retrieving executable path:", err)
+		fmt.Println("Error retrieving executable path: ", err)
 		os.Exit(1)
 	}
 
 	return filepath.Dir(exePath)
 }
 
-func getFileExtensions(fileType string, filePath string) []string {
-	fileExtensions, err := mime.ExtensionsByType(fileType)
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Error getting extension for mime type %s for file %s: %s", fileType, filePath, err))
-		os.Exit(1)
-	}
-
-	return fileExtensions
-}
-
-func getSaveDirAndCreateIfNotExists(exeDir string, fileExtension string) string {
-	saveDir := filepath.Join(exeDir, fileExtension[1:])
+func getOrCreateSaveDir(exeDir string, fileExtension string) string {
+	saveDir := filepath.Join(exeDir, fileExtension)
 	_, err := os.Stat(saveDir)
 	if os.IsNotExist(err) {
 		os.Mkdir(saveDir, 0755)
@@ -182,26 +176,37 @@ func getDiscordCacheFolderBasedOnOS() string {
 	}
 }
 
-func getFileMimeType(buffer []byte) (string, error, int) {
+func getNewFileData(buffer []byte) (cachedFileData, error) {
 	if runtime.GOOS == "windows" {
-		return mimetype.Detect(buffer).String(), nil, 0
+		return getFileExtension(buffer)
 	} else {
-		return detectUnixFileMIMEType(buffer)
+		return getFileExtensionLinux(buffer)
 	}
 }
 
-func detectUnixFileMIMEType(buffer []byte) (string, error, int) {
-	for i := 0; i < 400; i++ {
+func getFileExtension(buffer []byte) (cachedFileData, error) {
+	fileInfo, _ := filetype.Match(buffer)
+	if fileInfo == filetype.Unknown {
+		return cachedFileData{}, errors.New("unknown filetype")
+	}
+
+	return cachedFileData{fileInfo.Extension, 0}, nil
+}
+
+func getFileExtensionLinux(buffer []byte) (cachedFileData, error) {
+	for i := 0; i < 70; i++ {
 		if i >= len(buffer) {
 			break
 		}
 
-		kind, _ := filetype.Match(buffer[i:])
+		fileInfo, _ := filetype.Match(buffer[i:])
 
-		if kind != filetype.Unknown {
-			return kind.MIME.Value, nil, i
+		if fileInfo == filetype.Unknown {
+			continue
 		}
+
+		return cachedFileData{fileInfo.Extension, 0}, nil
 	}
 
-	return "", fmt.Errorf("Unknown filetype"), 0
+	return cachedFileData{}, errors.New("unknown filetype")
 }
