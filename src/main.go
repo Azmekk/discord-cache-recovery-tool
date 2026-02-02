@@ -7,7 +7,10 @@ import (
 	"sync"
 )
 
+var version = "dev"
+
 func main() {
+	fmt.Printf("Discord Cache Recovery Tool %s\n", version)
 	fmt.Println("Locating discord cache folder")
 	discordCacheFolder := getDiscordCacheFolderBasedOnOS()
 
