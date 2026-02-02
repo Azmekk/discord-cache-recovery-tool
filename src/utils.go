@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,48 +11,58 @@ import (
 	"github.com/h2non/filetype"
 )
 
+// cachedFileData holds the detected file type and the byte offset where the
+// actual media content begins. startingByte is the offset past the Chromium
+// Simple Cache header; on Windows it is always 0 because the filetype library
+// matches directly at offset 0.
 type cachedFileData struct {
 	fileExtension string
 	startingByte  int
 }
 
+// knownUnreadableFiles lists Chromium Simple Cache index and block files.
+// These are internal bookkeeping files for the cache engine, not actual
+// cached content, so we skip them.
 var knownUnreadableFiles = [...]string{"index", "data_0", "data_1", "data_2", "data_3"}
-var exeDir string = getExeDir()
 
-func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
-	if fileInfo.IsDir() {
+var outputDir string = getOutputDir()
+
+var errUnknownFiletype = errors.New("unknown filetype")
+
+func readAndSeparateFile(dirEntry os.DirEntry, discordCacheFolder string) {
+	if dirEntry.IsDir() {
 		return
 	}
 
 	for _, item := range knownUnreadableFiles {
-		if item == fileInfo.Name() {
+		if item == dirEntry.Name() {
 			return
 		}
 	}
 
-	filePath := filepath.Join(discordCacheFolder, fileInfo.Name())
+	filePath := filepath.Join(discordCacheFolder, dirEntry.Name())
 
-	buffer, err := getFileBuffer(filePath, fileInfo)
+	buffer, err := os.ReadFile(filePath)
 	if err != nil {
-		fmt.Println("Could not read buffer for file: ", fileInfo.Name())
+		fmt.Println("Could not read file: ", dirEntry.Name())
 		return
 	}
 
 	fileData, err := getNewFileData(buffer)
 
-	if err != nil && err.Error() == "unknown filetype" {
+	if errors.Is(err, errUnknownFiletype) {
 		return
 	}
 
 	if err != nil {
-		fmt.Println("Encountered error while trying to determine file type for file: ", fileInfo.Name())
+		fmt.Println("Encountered error while trying to determine file type for file: ", dirEntry.Name())
 		return
 	}
 
-	saveDir := getOrCreateSaveDir(exeDir, fileData.fileExtension)
+	saveDir := getOrCreateSaveDir(outputDir, fileData.fileExtension)
 
 	buffer = buffer[fileData.startingByte:]
-	fileExists, newFilePath := getNewFilePath(buffer, saveDir, fileInfo.Name(), fileData.fileExtension)
+	fileExists, newFilePath := getNewFilePath(buffer, saveDir, dirEntry.Name(), fileData.fileExtension)
 
 	if fileExists {
 		return
@@ -61,7 +70,6 @@ func readAndSeparateFile(fileInfo fs.FileInfo, discordCacheFolder string) {
 
 	err = os.WriteFile(newFilePath, buffer, 0644)
 	if err != nil {
-
 		fmt.Println("Error writing file: ", filePath, " due to err: ", err)
 		return
 	}
@@ -79,11 +87,7 @@ func isSameFile(buffer []byte, existingFilePath string) bool {
 		return true
 	}
 
-	if bytes.Equal(fileData, buffer) {
-		return true
-	} else {
-		return false
-	}
+	return bytes.Equal(fileData, buffer)
 }
 
 func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtension string) (bool, string) {
@@ -96,47 +100,32 @@ func getNewFilePath(buffer []byte, saveDir string, fileName string, fileExtensio
 	i := 0
 	for fileNameExists(filePath) {
 		i++
-		filePath = fmt.Sprintf("%d_%s", i, filePath)
+		filePath = filepath.Join(saveDir, fmt.Sprintf("%d_%s.%s", i, fileName, fileExtension))
 	}
 
 	return false, filePath
 }
 
-func getFileBuffer(filePath string, fileInfo fs.FileInfo) ([]byte, error) {
-	file, err := os.Open(filePath)
-
-	if err != nil {
-		fmt.Println("Error opening file: ", filePath, " due to err: ", err)
-		return nil, errors.New("")
-	}
-	defer file.Close()
-
-	buffer := make([]byte, fileInfo.Size())
-	_, err = file.Read(buffer)
-	if err != nil {
-		fmt.Println("Error reading file: ", filePath, " due to err: ", err)
-		return nil, errors.New("")
-	}
-
-	return buffer, nil
-}
-
-func getExeDir() string {
+func getOutputDir() string {
 	exePath, err := os.Executable()
 	if err != nil {
 		fmt.Println("Error retrieving executable path: ", err)
 		os.Exit(1)
 	}
 
-	return filepath.Dir(exePath)
+	outputDir := filepath.Join(filepath.Dir(exePath), "discord_cache_output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		fmt.Println("Error creating output directory: ", err)
+		os.Exit(1)
+	}
+
+	return outputDir
 }
 
-func getOrCreateSaveDir(exeDir string, fileExtension string) string {
-	saveDir := filepath.Join(exeDir, fileExtension)
-	_, err := os.Stat(saveDir)
-	if os.IsNotExist(err) {
-		os.Mkdir(saveDir, 0755)
-	} else if err != nil {
+func getOrCreateSaveDir(baseDir string, fileExtension string) string {
+	saveDir := filepath.Join(baseDir, fileExtension)
+
+	if err := os.MkdirAll(saveDir, 0755); err != nil {
 		fmt.Println("Error:", err)
 	}
 
@@ -145,7 +134,8 @@ func getOrCreateSaveDir(exeDir string, fileExtension string) string {
 
 func getDiscordCacheFolderBasedOnOS() string {
 	operatingSystem := runtime.GOOS
-	if operatingSystem == "windows" {
+	switch operatingSystem {
+	case "windows":
 		userConfigDir, err := os.UserConfigDir()
 		if err != nil {
 			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
@@ -153,7 +143,7 @@ func getDiscordCacheFolderBasedOnOS() string {
 			return ""
 		}
 		return filepath.Join(userConfigDir, "discord/Cache/Cache_Data")
-	} else if operatingSystem == "darwin" {
+	case "darwin":
 		userHomeDir, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
@@ -161,7 +151,7 @@ func getDiscordCacheFolderBasedOnOS() string {
 			return ""
 		}
 		return filepath.Join(userHomeDir, "Library/Application Support/discord/Cache/Cache_Data")
-	} else if operatingSystem == "linux" {
+	case "linux":
 		userHomeDir, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
@@ -169,7 +159,7 @@ func getDiscordCacheFolderBasedOnOS() string {
 			return ""
 		}
 		return filepath.Join(userHomeDir, ".config/discord/Cache/Cache_Data")
-	} else {
+	default:
 		fmt.Println("Unrecognized OS")
 		os.Exit(1)
 		return ""
@@ -184,15 +174,22 @@ func getNewFileData(buffer []byte) (cachedFileData, error) {
 	}
 }
 
+// getFileExtension detects the file type on Windows. The filetype library
+// matches magic bytes directly at offset 0, so no scanning is needed.
 func getFileExtension(buffer []byte) (cachedFileData, error) {
 	fileInfo, _ := filetype.Match(buffer)
 	if fileInfo == filetype.Unknown {
-		return cachedFileData{}, errors.New("unknown filetype")
+		return cachedFileData{}, errUnknownFiletype
 	}
 
 	return cachedFileData{fileInfo.Extension, 0}, nil
 }
 
+// getFileExtensionLinux detects the file type on Linux and macOS.
+// Discord/Electron uses Chromium's Simple Cache format, where each entry
+// starts with a SimpleFileHeader (magic number, version, key hash, URL key).
+// The actual file content starts at a variable offset, so we scan the first
+// 70 bytes looking for a recognized file-type magic signature.
 func getFileExtensionLinux(buffer []byte) (cachedFileData, error) {
 	for i := 0; i < 70; i++ {
 		if i >= len(buffer) {
@@ -205,8 +202,8 @@ func getFileExtensionLinux(buffer []byte) (cachedFileData, error) {
 			continue
 		}
 
-		return cachedFileData{fileInfo.Extension, 0}, nil
+		return cachedFileData{fileInfo.Extension, i}, nil
 	}
 
-	return cachedFileData{}, errors.New("unknown filetype")
+	return cachedFileData{}, errUnknownFiletype
 }
