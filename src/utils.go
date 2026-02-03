@@ -152,18 +152,37 @@ func getDiscordCacheFolderBasedOnOS() string {
 		}
 		return filepath.Join(userHomeDir, "Library/Application Support/discord/Cache/Cache_Data")
 	case "linux":
-		userHomeDir, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
-			os.Exit(1)
-			return ""
-		}
-		return filepath.Join(userHomeDir, ".config/discord/Cache/Cache_Data")
+		return getLinuxDiscordCacheFolder()
 	default:
 		fmt.Println("Unrecognized OS")
 		os.Exit(1)
 		return ""
 	}
+}
+
+func getLinuxDiscordCacheFolder() string {
+	userHomeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Something went wrong when grabbing the discord cache directory:", err)
+		os.Exit(1)
+		return ""
+	}
+
+	standardPath := filepath.Join(userHomeDir, ".config/discord/Cache/Cache_Data")
+	if fileNameExists(standardPath) {
+		return standardPath
+	}
+
+	flatpakPath := filepath.Join(userHomeDir, ".var/app/com.discordapp.Discord/config/discord/Cache/Cache_Data")
+	if fileNameExists(flatpakPath) {
+		return flatpakPath
+	}
+
+	fmt.Println("Could not find Discord cache directory. Checked:")
+	fmt.Println("  ", standardPath)
+	fmt.Println("  ", flatpakPath)
+	os.Exit(1)
+	return ""
 }
 
 func getNewFileData(buffer []byte) (cachedFileData, error) {
