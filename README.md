@@ -1,31 +1,77 @@
-# Discord cache recovery tool
+# Discord Cache Recovery
 
-This tool is designed to help recover lost media files from the Discord cache folder.
+Find and recover images, GIFs, videos and emojis that are still sitting in your Discord cache,
+even after the original message, link or GIF was deleted.
 
-## Description
+## What it does
 
-The Discord Cache Recovery Tool is a simple application that reads through the Discord cache folder and organizes the media files into respective folders based on their extension. It is highly useful for lost images or gifs that are still somewhere on your discord client, however their source has disappeared. E.g.
-gifs that are still visible in your favourite gifs tab but the links to them lead to an empty/deleted page.
+Discord keeps a local copy of the media you've seen. This app reads that cache and shows
+everything in a searchable gallery:
 
-## Usage
+- **Real file names and links.** Attachments show their original file name, and every file
+  shows the link it was downloaded from.
+- **Dates.** When an attachment was posted (decoded from Discord's IDs) and when your Discord
+  downloaded it.
+- **Sorted by kind.** Attachments, GIFs, emojis, stickers, avatars, server icons and embeds.
+- **Search and filter** by name, link, channel ID, type and date. Name channels yourself to
+  find things by where they were sent.
+- **Export** a single file or a whole selection to any folder. Exported files keep the
+  original name and their date.
+- Supports Discord, PTB, Canary and Development on Windows, macOS and Linux (including
+  Flatpak and Snap). You can also open a cache folder you copied somewhere else.
 
-1. Download the respective file for your operating system from the [latest release](https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest). 
-2. Place it in a folder where you want to dump all the files
-3. Run the file by either double clicking on it or using a terminal.
+## Is it safe? Can it get my account banned?
+
+The app works **entirely offline**. It never logs in, never uses your account or token,
+never talks to Discord's servers and never modifies Discord. It only reads files Discord
+already stored on your computer, the same way a file browser would.
+
+## Download
+
+Get the installer for your system from the
+[latest release](https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest):
+
+| System | File |
+|---|---|
+| Windows | `.msi` or `-setup.exe` |
+| macOS (Intel and Apple Silicon) | `.dmg` |
+| Linux | `.AppImage`, `.deb` or `.rpm` |
+
+The macOS build isn't signed with an Apple developer certificate. If macOS says the app is
+damaged, run `xattr -cr "/Applications/Discord Cache Recovery.app"` once.
 
 ## FAQ
 
-### Q: Is this a virus?
-A: No, but you can and should still run it through virustotal for your own safety as you shold do with any other sketchy exe file.
+### I can't find the image or GIF I'm looking for.
+The app can only recover what is still in the cache. Discord removes old entries as the cache
+fills up, and clearing the cache deletes everything. Try turning off **Group sizes**, and check
+**Show Discord's own interface images** in case it's filed there.
 
-### Q: Can this flood my disk?
-A: No, the app is designed to recognize already recovered files. You can run it to your heart's content.
+### Does it know which server or favorite GIF tab something came from?
+Not directly. That information isn't stored with the cached files. Attachments include the
+channel ID, so you can label channels yourself (right-click a channel in Discord with
+Developer Mode on, then Copy Channel ID).
 
-### Q: I wasn't able to find the image/gif I was trying to recover.
-A: The app will only recover whatever is still available in the discord cache. It can only retrieve items if they have not been deleted from it.
+## Development
 
-### Q: Can it look for a specific file?
-A: It would be too complicated to map cache to the respective files in the discord client so it will simply dump all the media for you to find. You can probably narrow the search by searching for the specific flie in the proper folder based on the file's extension. E.g gif.
+Requires Node 22+, Rust (stable) and the
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
+
+```bash
+npm install
+npm run tauri dev
+```
+
+`npm run dev` runs the UI alone in a browser with generated sample data. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the cache is parsed.
+
+### Releasing
+
+Push a version tag; GitHub Actions builds every platform and publishes the release:
+
+```bash
+./release.sh v4.0.0
+```
 
 ## Collaborators
 
@@ -33,4 +79,4 @@ A: It would be too complicated to map cache to the respective files in the disco
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE.md file for details
+MIT, see [LICENSE](LICENSE).

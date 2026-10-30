@@ -1,5 +1,7 @@
 name: Release
 
+# Runs only when a version tag (e.g. v4.0.0) is pushed, via release.sh / release.ps1.
+# Pushes to main do not trigger a release.
 on:
   push:
     tags:
@@ -9,54 +11,89 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # Create one draft release up front so the parallel builds all upload to it.
+  create-release:
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Discord Cache Recovery $GITHUB_REF_NAME" \
+            --generate-notes \
+            --draft
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - goos: windows
-            goarch: amd64
-            name: recoverdiscordcache_windows.exe
-          - goos: linux
-            goarch: amd64
-            name: recoverdiscordcache_linux
-          - goos: darwin
-            goarch: amd64
-            name: recoverdiscordcache_mac
+          - platform: windows-latest
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: src/go.mod
-          cache-dependency-path: src/go.sum
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
 
-      - name: Build
-        working-directory: ./src
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      # The tag is the source of truth for the version (v4.1.0 -> 4.1.0).
+      - name: Set app version from tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          node -e '
+            const fs = require("fs");
+            const v = process.argv[1];
+            if (!/^\d+\.\d+\.\d+$/.test(v)) { console.error("Tag must look like v1.2.3, got " + v); process.exit(1); }
+            const p = "src-tauri/tauri.conf.json";
+            const conf = JSON.parse(fs.readFileSync(p, "utf8"));
+            conf.version = v;
+            fs.writeFileSync(p, JSON.stringify(conf, null, 2));
+          ' "$version"
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
         env:
-          CGO_ENABLED: "0"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o ${{ matrix.name }}
-
-      - uses: actions/upload-artifact@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ matrix.name }}
-          path: src/${{ matrix.name }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
 
-  release:
-    needs: build
+  publish-release:
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            recoverdiscordcache_windows.exe
-            recoverdiscordcache_linux
-            recoverdiscordcache_mac
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
