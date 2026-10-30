@@ -1,99 +1,160 @@
+# Builds installers for Windows, macOS and Linux and publishes them as a GitHub
+# release named after the version in src-tauri/tauri.conf.json.
+#
+# Runs only when a version tag is pushed (or from the Actions tab), never on
+# pushes to main. The release stays a draft while the six builds run and is
+# published only once all of them succeed, so nobody sees a release with
+# missing installers. If a build fails, the draft is left for you to fix or
+# delete; running the workflow again reuses it.
+#
+# To release: bump "version" in src-tauri/tauri.conf.json, commit, then push a
+# matching tag (./release.sh v4.1.0).
 name: Release
 
-# Runs only when a version tag (e.g. v4.0.0) is pushed, via release.sh / release.ps1.
-# Pushes to main do not trigger a release.
 on:
   push:
-    tags:
-      - "v*"
+    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  # Create one draft release up front so the parallel builds all upload to it.
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create.outputs.release_id }}
+      release_id: ${{ steps.release.outputs.id }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Create draft release
-        id: create
+        id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Discord Cache Recovery $GITHUB_REF_NAME" \
-            --generate-notes \
-            --draft
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")
-          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          # A pushed tag must match the app version, or the installers would carry the wrong number.
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in src-tauri/tauri.conf.json."
+            exit 1
+          fi
+
+          # Reuse a leftover draft (e.g. from a failed run); refuse to touch a published release.
+          if draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != "true" ]; then
+              echo "::error::$tag is already published. Bump \"version\" in src-tauri/tauri.conf.json first."
+              exit 1
+            fi
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -1)
+          else
+            cat > notes.md <<'EOF'
+          **Which file do I need?**
+          - Windows: `…_x64-setup.exe` (or `…_arm64-setup.exe` on ARM PCs)
+          - macOS: `…_aarch64.dmg` for Apple Silicon (M1 and later), `…_x64.dmg` for Intel Macs
+          - Linux: `.AppImage` runs anywhere; `.deb` for Debian/Ubuntu, `.rpm` for Fedora
+
+          The builds aren't code-signed, so the first launch needs one extra step:
+          - Windows SmartScreen: **More info → Run anyway**
+          - macOS: if it says the app is damaged, run `xattr -cr "/Applications/Discord Cache Recovery.app"` once
+
+          The app works offline and only reads files already on your computer. It never logs in or talks to Discord.
+          EOF
+            # Take the id from the create response: the release list can lag behind by a few seconds.
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" -X POST \
+              -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" -f name="Discord Cache Recovery $tag" \
+              -F body=@notes.md -F draft=true --jq .id)
+          fi
+          if [ -z "$id" ]; then
+            echo "::error::Couldn't get the id of the $tag release."
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
+    name: ${{ matrix.name }}
     needs: create-release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: windows-latest
-            args: ""
-          - platform: macos-latest
-            args: "--target universal-apple-darwin"
-          - platform: ubuntu-22.04
-            args: ""
-    runs-on: ${{ matrix.platform }}
+          - name: Windows x64
+            runner: windows-latest
+            args: ''
+          - name: Windows ARM64
+            runner: windows-11-arm
+            args: ''
+          - name: macOS Apple Silicon
+            runner: macos-latest
+            args: --target aarch64-apple-darwin
+          - name: macOS Intel
+            runner: macos-latest
+            args: --target x86_64-apple-darwin
+          - name: Linux x64
+            runner: ubuntu-24.04
+            args: ''
+          - name: Linux ARM64
+            runner: ubuntu-24.04-arm
+            args: ''
+    runs-on: ${{ matrix.runner }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Both Mac targets build on the Apple Silicon runner.
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.name }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      # The tag is the source of truth for the version (v4.1.0 -> 4.1.0).
-      - name: Set app version from tag
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          node -e '
-            const fs = require("fs");
-            const v = process.argv[1];
-            if (!/^\d+\.\d+\.\d+$/.test(v)) { console.error("Tag must look like v1.2.3, got " + v); process.exit(1); }
-            const p = "src-tauri/tauri.conf.json";
-            const conf = JSON.parse(fs.readFileSync(p, "utf8"));
-            conf.version = v;
-            fs.writeFileSync(p, JSON.stringify(conf, null, 2));
-          ' "$version"
-
-      - run: npm ci
+      - name: Install frontend dependencies
+        run: npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
 
-  publish-release:
+  publish:
     needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Publish release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          # Last safety net: never publish a release with installers missing.
+          # 14 = per platform: setup.exe + msi (Windows x2), dmg + app.tar.gz (macOS x2),
+          # AppImage + deb + rpm (Linux x2).
+          expected=14
+          count=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --paginate --jq '[.[] | select(.name | test("\\.(exe|msi|dmg|tar\\.gz|AppImage|deb|rpm)$"))] | length')
+          if [ "$count" -lt "$expected" ]; then
+            echo "::error::Only $count of $expected installers are attached; leaving the release as a draft."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -X PATCH -F draft=false -f make_latest=true --jq .html_url
