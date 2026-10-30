@@ -5,11 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Discord Cache Recovery: get back deleted Discord images and GIFs</title>
 <meta name="description" content="A free, open-source desktop app that finds the images, GIFs, videos and emojis still sitting in Discord's local cache, and gives them back as real files with their original names and dates. Works offline on Windows, macOS and Linux.">
-<link rel="icon" href="../../site/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#141925">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Discord Cache Recovery">
+<meta property="og:description" content="Get back the images, GIFs, videos and emojis Discord left on your computer, with their original names and dates. Free, open source, works offline.">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="../../site/downloads.js" defer></script>
+<script src="./downloads.js" defer></script>
 <style>
   :root {
     --slate: #141925;
@@ -59,6 +63,12 @@
   .gh svg { width: 16px; height: 16px; fill: currentColor; }
   @media (max-width: 720px) { .top nav .opt { display: none; } }
   @media (max-width: 440px) { .top nav .dl { display: none; } .top .wrap { gap: 12px; } }
+  /* Phones: icon-only GitHub link so the brand name never runs into it. */
+  @media (max-width: 480px) {
+    .gh-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .top nav .gh { padding: 8px; }
+    .brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
 
   /* hero */
   .hero { padding: clamp(40px, 7vw, 88px) 0 clamp(56px, 8vw, 104px); }
@@ -256,13 +266,13 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="../../site/icon.svg" alt="" width="28" height="28">Discord Cache Recovery</a>
+    <a class="brand" href="#"><img src="./icon.svg" alt="" width="28" height="28">Discord Cache Recovery</a>
     <nav aria-label="Main">
       <a class="opt" href="#recovers">What it finds</a>
       <a class="opt" href="#safe">Safety</a>
       <a class="opt" href="#faq">FAQ</a>
       <a class="dl" href="#download">Download</a>
-      <a class="gh" href="https://github.com/Azmekk/discord-cache-recovery-tool"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+      <a class="gh" href="https://github.com/Azmekk/discord-cache-recovery-tool"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span class="gh-label">GitHub</span></a>
     </nav>
   </div>
 </header>
@@ -301,12 +311,12 @@
       <div class="shot-head">
         <h2 id="shot-title">Everything it found, in one gallery you can search</h2>
         <div class="toggle" role="group" aria-label="Screenshot theme">
-          <button type="button" aria-pressed="true" data-shot="../../site/screenshot.png">Dark</button>
-          <button type="button" aria-pressed="false" data-shot="../../site/screenshot-light.png">Light</button>
+          <button type="button" aria-pressed="true" data-shot="./screenshot.png">Dark</button>
+          <button type="button" aria-pressed="false" data-shot="./screenshot-light.png">Light</button>
         </div>
       </div>
       <div class="frame">
-        <img id="shot" src="../../site/screenshot.png" width="1320" height="820" loading="lazy" alt="The Discord Cache Recovery window: a sidebar of filters for kind, format, date and Discord install, and a grid of recovered images and GIFs with their file names.">
+        <img id="shot" src="./screenshot.png" width="1320" height="820" loading="lazy" alt="The Discord Cache Recovery window: a sidebar of filters for kind, format, date and Discord install, and a grid of recovered images and GIFs with their file names.">
       </div>
     </div>
   </section>
@@ -627,11 +637,13 @@
 
   // ---------- loop ----------
   const SPEED = 6; // rows per second
-  let running = false, visible = true, last = 0, pauseUntil = 0, raf = 0;
+  let running = false, built = false, visible = true, last = 0, pauseUntil = 0, raf = 0;
 
   function frame(t) {
     raf = 0;
     if (!running) return;
+    // Rows are built after web fonts load; until then there is nothing to scroll.
+    if (!rowEls.length || !rowH) { raf = requestAnimationFrame(frame); return; }
     const dt = Math.min(0.05, (t - (last || t)) / 1000);
     last = t;
     if (t >= pauseUntil) {
@@ -647,7 +659,7 @@
     raf = requestAnimationFrame(frame);
   }
   function update() {
-    const should = visible && !document.hidden && !reduce.matches;
+    const should = built && visible && !document.hidden && !reduce.matches;
     if (should && !running) { running = true; last = 0; raf = requestAnimationFrame(frame); }
     else if (!should && running) { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
   }
@@ -671,6 +683,7 @@
     // lead-in so the first signature arrives after the viewer has filled
     for (let i = 0; i < 200; i++) push(rnd() < .3 ? 0 : Math.floor(rnd() * 256));
     build();
+    built = true;
     if (reduce.matches) staticFrame();
     else [FILES[3], FILES[4]].forEach((f) => rail.appendChild(makeCard(f)));
     update();

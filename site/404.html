@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found · Discord Cache Recovery</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#141925">
+<!-- Served for any missing path, so every URL here is root-absolute. -->
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --slate: #141925;
+    --slate-2: #1A2030;
+    --line: #2E3850;
+    --text: #E9EBF1;
+    --muted: #A2AABD;
+    --dim: #6A7490;
+    --amber: #F0B64A;
+    --display: "Bricolage Grotesque", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: grid;
+    place-items: center;
+    padding: 32px 16px;
+    background: var(--slate);
+    color: var(--text);
+    font-family: var(--display);
+    font-optical-sizing: auto;
+    line-height: 1.6;
+  }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+  main { width: 100%; max-width: 560px; }
+  .dump {
+    font: 400 13px/1.9 var(--mono);
+    color: var(--dim);
+    background: var(--slate-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 0 0 32px;
+    overflow: hidden;
+    white-space: pre;
+  }
+  .dump .hit { color: var(--slate); background: var(--amber); border-radius: 3px; padding: 0 2px; }
+  .dump .off { color: var(--muted); }
+  h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2rem, 6vw, 2.75rem);
+    line-height: 1.02;
+    letter-spacing: -.03em;
+    font-weight: 800;
+    font-variation-settings: "opsz" 96;
+  }
+  p { margin: 0 0 28px; color: var(--muted); font-size: 1.0625rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center;
+    background: var(--amber); color: #1A1406; text-decoration: none; font-weight: 700;
+    padding: 12px 22px; border-radius: 12px;
+  }
+  .btn:hover { filter: brightness(1.06); }
+  .link { color: var(--text); text-underline-offset: 4px; }
+  @media (max-width: 420px) { .dump { font-size: 11px; } }
+</style>
+</head>
+<body>
+<main>
+  <pre class="dump" aria-hidden="true"><span class="off">000003F8</span>  00 00 00 00 00 00 00 00  <span class="off">........</span>
+<span class="off">00000400</span>  <span class="hit">34 30 34</span> 00 00 00 00 00  <span class="off">404.....</span>
+<span class="off">00000408</span>  00 00 00 00 00 00 00 00  <span class="off">........</span></pre>
+  <h1>Nothing cached at this address</h1>
+  <p>This page doesn't exist. The app, the downloads and the answers to common questions are all on the main page.</p>
+  <div class="actions">
+    <a class="btn" href="/">Go to the download page</a>
+    <a class="link" href="https://github.com/Azmekk/discord-cache-recovery-tool">View on GitHub</a>
+  </div>
+</main>
+</body>
+</html>
