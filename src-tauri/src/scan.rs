@@ -276,7 +276,9 @@ fn collect_jobs(
         .collect();
     files.sort();
 
-    report.details.push_str(&format!("  files in folder: {}\n", files.len()));
+    report
+        .details
+        .push_str(&format!("  files in folder: {}\n", files.len()));
 
     let mut referenced = HashSet::new();
     if dir.join("data_1").is_file() {
@@ -303,6 +305,33 @@ fn collect_jobs(
                     s.rej_body_size,
                     s.rej_key,
                 ));
+                let unlinked: Vec<&str> = scan
+                    .entries
+                    .iter()
+                    .map(|e| e.key.as_str())
+                    .filter(|k| {
+                        crate::classify::key_url(k)
+                            .and_then(|u| url::Url::parse(u).ok())
+                            .is_none()
+                    })
+                    .collect();
+                report.details.push_str(&format!(
+                    "  entries without a usable link: {}\n",
+                    unlinked.len()
+                ));
+                let mut shapes: Vec<String> = Vec::new();
+                for k in &unlinked {
+                    let s = crate::classify::key_shape(k);
+                    if !shapes.contains(&s) {
+                        shapes.push(s);
+                    }
+                    if shapes.len() == 3 {
+                        break;
+                    }
+                }
+                for s in shapes {
+                    report.details.push_str(&format!("    key shape: {s}\n"));
+                }
                 report.errors += scan.errors;
                 referenced = scan.referenced;
                 jobs.extend(scan.entries.into_iter().map(|e| SourceJob {

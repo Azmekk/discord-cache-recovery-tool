@@ -48,10 +48,28 @@ fn is_snowflake(s: &str) -> bool {
     (15..=21).contains(&s.len()) && s.bytes().all(|c| c.is_ascii_digit())
 }
 
-/// Extracts the URL from a cache key: the last whitespace token, if it starts with `http`.
+/// Extracts the URL from a cache key. Keys usually end with the URL, after an optional
+/// isolation-key prefix (`1/0/_dk_https://a https://a https://cdn…`), but the prefix can be
+/// glued to the URL or followed by other tokens, so take the last token that contains
+/// `http://` or `https://`, starting at that scheme.
 pub fn key_url(key: &str) -> Option<&str> {
-    let tok = key.split_whitespace().last()?;
-    tok.starts_with("http").then_some(tok)
+    key.split_whitespace().rev().find_map(|tok| {
+        let start = tok.find("https://").or_else(|| tok.find("http://"))?;
+        Some(&tok[start..])
+    })
+}
+
+/// The key with letters replaced by `a` and digits by `9`, truncated: shows the structure of
+/// keys we fail to parse without revealing any URL, for the scan details.
+pub fn key_shape(key: &str) -> String {
+    key.chars()
+        .take(120)
+        .map(|c| match c {
+            c if c.is_ascii_alphabetic() => 'a',
+            c if c.is_ascii_digit() => '9',
+            c => c,
+        })
+        .collect()
 }
 
 fn decode(s: &str) -> String {
@@ -268,6 +286,25 @@ mod tests {
         assert_eq!(snowflake_ms("175928847299117063"), Some(1_462_015_105_796));
         assert_eq!(snowflake_ms("not a number"), None);
         assert_eq!(snowflake_ms("1"), None);
+    }
+
+    #[test]
+    fn key_url_variants() {
+        let url = "https://cdn.discordapp.com/emojis/1.webp";
+        for key in [
+            url.to_string(),
+            format!("1/0/_dk_https://discord.com https://discord.com {url}"),
+            format!("1/0/{url}"),
+            format!("1/0/_dk_s_https://discord.com https://discord.com {url} "),
+            format!("1/0/_dk_https://discord.com https://discord.com {url} 9"),
+        ] {
+            assert_eq!(key_url(&key), Some(url), "{key}");
+        }
+        assert_eq!(key_url("no link here"), None);
+        assert_eq!(
+            key_shape("1/0/_dk_https://a.com x"),
+            "9/9/_aa_aaaaa://a.aaa a"
+        );
     }
 
     #[test]
