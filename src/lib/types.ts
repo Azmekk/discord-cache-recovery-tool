@@ -39,7 +39,18 @@ export interface Source {
 export type ScanEvent =
   | { type: 'started'; data: { total: number; sources: Source[] } }
   | { type: 'batch'; data: { entries: Entry[]; done: number; total: number } }
-  | { type: 'finished'; data: { count: number; elapsedMs: number; errors: number } };
+  | {
+      type: 'finished';
+      data: {
+        count: number;
+        elapsedMs: number;
+        errors: number;
+        /** Sources whose cache index Discord held locked (Discord is running). */
+        lockedSources: string[];
+        /** Plain-text scan details with counts only, for bug reports. */
+        diagnostics: string;
+      };
+    };
 
 export interface ExportResult {
   written: number;

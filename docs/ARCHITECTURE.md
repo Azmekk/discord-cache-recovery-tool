@@ -28,6 +28,9 @@ Discord is Electron, so its cache is Chromium's HTTP disk cache, at
   Block: bits 16–23 file selector (`data_<sel>`), bits 24–25 block count − 1,
   bits 0–15 start block; offset = 8192 + start × block size.
 - Small bodies (< ~16 KiB) live **inside** `data_N` blocks, not in `f_` files.
+- While Discord runs it holds `index` and `data_N` open exclusively (Windows sharing
+  violation), so names, links and dates can only be read with Discord fully closed. `f_` files
+  stay readable. The scan reports this via `lockedSources` instead of failing silently.
 - `creation_time` and the pickle times are `base::Time`: microseconds since 1601-01-01 UTC.
 
 ### Simple cache (Linux, macOS)
@@ -102,7 +105,11 @@ interface Source { label: string; path: string; format: 'blockfile' | 'simple' |
 type ScanEvent =
   | { type: 'started';  data: { total: number; sources: Source[] } }
   | { type: 'batch';    data: { entries: Entry[]; done: number; total: number } }
-  | { type: 'finished'; data: { count: number; elapsedMs: number; errors: number } };
+  | { type: 'finished'; data: {
+      count: number; elapsedMs: number; errors: number;
+      lockedSources: string[]; // sources whose index Discord held locked (Discord running)
+      diagnostics: string;     // counts-only scan details for bug reports (no URLs/names)
+    } };
 ```
 
 Commands (`invoke`):

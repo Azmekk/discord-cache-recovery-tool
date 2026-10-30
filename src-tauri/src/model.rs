@@ -51,6 +51,11 @@ pub enum ScanEvent {
         count: u32,
         elapsed_ms: u64,
         errors: u32,
+        /// Labels of sources whose cache index Discord held locked (Discord is running).
+        locked_sources: Vec<String>,
+        /// Plain-text scan details with counts only (no URLs, names or contents), for the
+        /// user to copy into a bug report.
+        diagnostics: String,
     },
 }
 
@@ -100,10 +105,12 @@ mod tests {
             count: 3,
             elapsed_ms: 12,
             errors: 1,
+            locked_sources: vec!["Discord".into()],
+            diagnostics: "d".into(),
         };
         assert_eq!(
             serde_json::to_string(&ev).unwrap(),
-            r#"{"type":"finished","data":{"count":3,"elapsedMs":12,"errors":1}}"#
+            r#"{"type":"finished","data":{"count":3,"elapsedMs":12,"errors":1,"lockedSources":["Discord"],"diagnostics":"d"}}"#
         );
         let ev = ScanEvent::Batch {
             entries: vec![],

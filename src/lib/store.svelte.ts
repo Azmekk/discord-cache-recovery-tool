@@ -20,7 +20,20 @@ interface ScanState {
   total: number;
   errors: number;
   message: string;
+  /** Sources Discord held locked during the last scan. */
+  lockedSources: string[];
+  diagnostics: string;
 }
+
+const emptyScan = (phase: ScanState['phase']): ScanState => ({
+  phase,
+  done: 0,
+  total: 0,
+  errors: 0,
+  message: '',
+  lockedSources: [],
+  diagnostics: '',
+});
 
 const DAY = 86_400_000;
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -72,7 +85,7 @@ class AppState {
   entries = $state.raw<Entry[]>([]);
   detected = $state.raw<Source[] | null>(null);
   sources = $state.raw<Source[]>([]);
-  scan = $state<ScanState>({ phase: 'idle', done: 0, total: 0, errors: 0, message: '' });
+  scan = $state<ScanState>(emptyScan('idle'));
   /** When each entry arrived (performance.now()), for the develop animation. Not reactive on purpose. */
   arrival = new Map<number, number>();
 
@@ -208,13 +221,13 @@ class AppState {
       this.toast(`Couldn't look for Discord installs: ${errorText(err)}`, 'error');
     }
     if (this.detected.length) void this.startScan(null);
-    else this.scan = { phase: 'done', done: 0, total: 0, errors: 0, message: '' };
+    else this.scan = emptyScan('done');
   }
 
   async startScan(dirs: string[] | null) {
     const gen = ++this.scanGen;
     this.lastDirs = dirs;
-    this.scan = { phase: 'scanning', done: 0, total: 0, errors: 0, message: '' };
+    this.scan = emptyScan('scanning');
     this.entries = [];
     this.arrival.clear();
     this.selected = new Set();
@@ -245,8 +258,24 @@ class AppState {
         break;
       }
       case 'finished':
-        this.scan = { ...this.scan, phase: 'done', done: this.scan.total, errors: ev.data.errors };
+        this.scan = {
+          ...this.scan,
+          phase: 'done',
+          done: this.scan.total,
+          errors: ev.data.errors,
+          lockedSources: ev.data.lockedSources,
+          diagnostics: ev.data.diagnostics,
+        };
         break;
+    }
+  }
+
+  async copyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(this.scan.diagnostics);
+      this.toast('Scan details copied');
+    } catch (err) {
+      this.toast(`Couldn't copy the scan details: ${errorText(err)}`, 'error');
     }
   }
 

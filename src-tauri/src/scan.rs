@@ -28,6 +28,17 @@ enum Job {
     Orphan(PathBuf),
 }
 
+impl Job {
+    /// Index into the scan-details tally.
+    fn kind(&self) -> usize {
+        match self {
+            Job::Block(_) => 0,
+            Job::Simple(_) => 1,
+            Job::Orphan(_) => 2,
+        }
+    }
+}
+
 struct SourceJob {
     job: Job,
     source: Arc<str>,
@@ -97,20 +108,21 @@ where
     // Phase 1: list directories and parse blockfile metadata.
     let st = state.clone();
     let srcs = sources.clone();
-    let (jobs, mut errors) = tauri::async_runtime::spawn_blocking(move || {
+    let (jobs, reports) = tauri::async_runtime::spawn_blocking(move || {
         let cancelled = || !st.is_current(generation);
         let mut jobs = Vec::new();
-        let mut errors = 0u32;
+        let mut reports = Vec::new();
         for s in &srcs {
             if cancelled() {
                 break;
             }
-            errors += collect_jobs(Path::new(&s.path), &s.label, &cancelled, &mut jobs);
+            reports.push(collect_jobs(Path::new(&s.path), s, &cancelled, &mut jobs));
         }
-        (jobs, errors)
+        (jobs, reports)
     })
     .await
     .unwrap_or_default();
+    let mut errors: u32 = reports.iter().map(|r| r.errors).sum();
 
     if !state.is_current(generation) {
         return;
@@ -122,17 +134,20 @@ where
     let mut results = futures::stream::iter(jobs)
         .map(|job| {
             let st = state.clone();
+            let kind = job.job.kind();
             tauri::async_runtime::spawn_blocking(move || {
                 if !st.is_current(generation) {
-                    return Outcome::Skipped;
+                    return (kind, Outcome::Skipped);
                 }
-                run_job(job)
+                (kind, run_job(job))
             })
         })
         .buffer_unordered(CONCURRENCY);
 
     let mut done = 0u32;
     let mut count = 0u32;
+    // Found / skipped (not media) per job kind, for the scan details.
+    let mut tally = [[0u32; 2]; 3];
     let mut batch: Vec<Entry> = Vec::new();
     let mut last_flush = Instant::now();
     while let Some(res) = results.next().await {
@@ -141,7 +156,8 @@ where
         }
         done += 1;
         match res {
-            Ok(Outcome::Found(f)) => {
+            Ok((kind, Outcome::Found(f))) => {
+                tally[kind][0] += 1;
                 let id = state.next_id.fetch_add(1, Ordering::Relaxed) + 1;
                 let mut entry = f.entry;
                 entry.id = id;
@@ -161,8 +177,8 @@ where
                 batch.push(entry);
                 count += 1;
             }
-            Ok(Outcome::Skipped) => {}
-            Ok(Outcome::Error) | Err(_) => errors += 1,
+            Ok((kind, Outcome::Skipped)) => tally[kind][1] += 1,
+            Ok((_, Outcome::Error)) | Err(_) => errors += 1,
         }
         if batch.len() >= BATCH_SIZE || last_flush.elapsed() >= BATCH_INTERVAL {
             emit(ScanEvent::Batch {
@@ -183,11 +199,45 @@ where
             total,
         });
     }
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let mut diagnostics = format!(
+        "Discord Cache Recovery {} ({})\nScan: {count} files in {elapsed_ms} ms, {errors} errors\n\
+         Cache entries: {} media, {} not media\nSimple-cache entries: {} media, {} not media\n\
+         Loose files: {} media, {} not media\n",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        tally[0][0],
+        tally[0][1],
+        tally[1][0],
+        tally[1][1],
+        tally[2][0],
+        tally[2][1],
+    );
+    for r in &reports {
+        diagnostics.push('\n');
+        diagnostics.push_str(&r.details);
+    }
     emit(ScanEvent::Finished {
         count,
-        elapsed_ms: started.elapsed().as_millis() as u64,
+        elapsed_ms,
         errors,
+        locked_sources: reports
+            .iter()
+            .filter(|r| r.locked)
+            .map(|r| r.label.clone())
+            .collect(),
+        diagnostics,
     });
+}
+
+/// What phase 1 learned about one source.
+struct SourceReport {
+    label: String,
+    errors: u32,
+    /// Discord held the cache index locked, so names, links and dates are unavailable.
+    locked: bool,
+    /// Counts only, for the scan details.
+    details: String,
 }
 
 /// Files in a cache folder that are never media bodies.
@@ -200,17 +250,24 @@ fn is_metadata_name(name: &str) -> bool {
         || name.starts_with("todelete_")
 }
 
-/// Lists `dir` and appends its jobs. Returns the number of errors.
+/// Lists `dir` and appends its jobs.
 fn collect_jobs(
     dir: &Path,
-    label: &str,
+    src: &Source,
     cancelled: &dyn Fn() -> bool,
     jobs: &mut Vec<SourceJob>,
-) -> u32 {
-    let source: Arc<str> = Arc::from(label);
-    let mut errors = 0;
+) -> SourceReport {
+    let source: Arc<str> = Arc::from(src.label.as_str());
+    let mut report = SourceReport {
+        label: src.label.clone(),
+        errors: 0,
+        locked: false,
+        details: format!("{} ({:?} format)\n", src.label, src.format),
+    };
     let Ok(rd) = std::fs::read_dir(dir) else {
-        return 1;
+        report.errors = 1;
+        report.details.push_str("  folder could not be listed\n");
+        return report;
     };
     let mut files: Vec<(String, PathBuf)> = rd
         .flatten()
@@ -219,34 +276,63 @@ fn collect_jobs(
         .collect();
     files.sort();
 
+    report.details.push_str(&format!("  files in folder: {}\n", files.len()));
+
     let mut referenced = HashSet::new();
     if dir.join("data_1").is_file() {
         match blockfile::parse_dir(dir, cancelled) {
             Ok(scan) => {
-                errors += scan.errors;
+                let s = &scan.stats;
+                report.locked = s.locked > 0;
+                report.details.push_str(&format!(
+                    "  data files: {} found, {} entry files, {} locked, {} unreadable\n  \
+                     allocated blocks: {}\n  entries accepted: {}, body missing: {}\n  \
+                     rejected blocks: state {}, key length {}, time {}, body address {}, \
+                     body size {}, key {}\n",
+                    s.data_files,
+                    s.entry_files,
+                    s.locked,
+                    s.unreadable,
+                    s.blocks_allocated,
+                    s.accepted,
+                    s.body_missing,
+                    s.rej_state,
+                    s.rej_key_len,
+                    s.rej_time,
+                    s.rej_body_addr,
+                    s.rej_body_size,
+                    s.rej_key,
+                ));
+                report.errors += scan.errors;
                 referenced = scan.referenced;
                 jobs.extend(scan.entries.into_iter().map(|e| SourceJob {
                     job: Job::Block(e),
                     source: source.clone(),
                 }));
             }
-            Err(_) => errors += 1,
+            Err(_) => report.errors += 1,
         }
     }
+    let (mut simple_n, mut loose_n) = (0, 0);
     for (name, path) in files {
         if simple::is_entry_file_name(&name) {
+            simple_n += 1;
             jobs.push(SourceJob {
                 job: Job::Simple(path),
                 source: source.clone(),
             });
         } else if !is_metadata_name(&name) && !referenced.contains(&name) {
+            loose_n += 1;
             jobs.push(SourceJob {
                 job: Job::Orphan(path),
                 source: source.clone(),
             });
         }
     }
-    errors
+    report.details.push_str(&format!(
+        "  simple-cache files: {simple_n}, loose files: {loose_n}\n"
+    ));
+    report
 }
 
 fn mtime_ms(path: &Path) -> Option<i64> {
@@ -439,6 +525,47 @@ pub(crate) mod tests {
             .iter()
             .any(|e| e.kind == Kind::Attachment && e.ext == "gif"));
         assert_eq!(state.entries.read().unwrap().len(), 4);
+
+        let ScanEvent::Finished {
+            locked_sources,
+            diagnostics,
+            ..
+        } = events.last().unwrap()
+        else {
+            unreachable!()
+        };
+        assert!(locked_sources.is_empty());
+        assert!(diagnostics.contains("0 locked"), "{diagnostics}");
+        assert!(diagnostics.contains("entries accepted: 3"), "{diagnostics}");
+        // Counts only: no keys or URLs leak into the report.
+        assert!(!diagnostics.contains("http"), "{diagnostics}");
+    }
+
+    /// Discord holds its index files open exclusively while it runs. The scan must report
+    /// that instead of silently returning every file as unknown.
+    #[cfg(windows)]
+    #[test]
+    fn reports_locked_cache() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        bf::build_blockfile_dir(tmp.path());
+        let _lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(0)
+            .open(tmp.path().join("data_1"))
+            .unwrap();
+        let events = scan_dir(Arc::new(AppState::default()), tmp.path());
+        let ScanEvent::Finished {
+            locked_sources,
+            diagnostics,
+            ..
+        } = events.last().unwrap()
+        else {
+            panic!("no finished event");
+        };
+        assert_eq!(locked_sources, &vec!["Custom".to_string()]);
+        assert!(diagnostics.contains("1 locked"), "{diagnostics}");
     }
 
     #[test]

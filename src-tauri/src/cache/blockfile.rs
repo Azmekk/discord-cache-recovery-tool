@@ -91,6 +91,34 @@ pub struct BlockfileScan {
     /// File names (e.g. `f_00001a`) referenced by accepted entries.
     pub referenced: HashSet<String>,
     pub errors: u32,
+    pub stats: Stats,
+}
+
+/// Counters for the scan-details report. Counts only: never keys, URLs or contents.
+#[derive(Debug, Default, Clone)]
+pub struct Stats {
+    /// `data_N` files present in the folder.
+    pub data_files: u32,
+    /// `data_N` files another process (Discord) holds open exclusively.
+    pub locked: u32,
+    /// `data_N` files that failed to open or read for another reason.
+    pub unreadable: u32,
+    /// `data_N` files whose header marks them as 256-byte entry files.
+    pub entry_files: u32,
+    pub blocks_allocated: u64,
+    pub accepted: u32,
+    pub body_missing: u32,
+    pub rej_state: u32,
+    pub rej_key_len: u32,
+    pub rej_time: u32,
+    pub rej_body_addr: u32,
+    pub rej_body_size: u32,
+    pub rej_key: u32,
+}
+
+/// Windows ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION.
+pub fn is_lock_error(e: &io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(32) | Some(33))
 }
 
 struct DataFile {
@@ -179,7 +207,8 @@ fn valid_key(k: &[u8]) -> bool {
 }
 
 /// Lists the `data_N` files in `dir` whose header says they hold 256-byte blocks.
-fn entry_block_files(dir: &Path) -> Vec<(u8, PathBuf)> {
+/// Files that can't be opened are counted in `stats` rather than silently skipped.
+fn entry_block_files(dir: &Path, stats: &mut Stats) -> Vec<(u8, PathBuf)> {
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(dir) else {
         return out;
@@ -192,15 +221,25 @@ fn entry_block_files(dir: &Path) -> Vec<(u8, PathBuf)> {
         else {
             continue;
         };
+        stats.data_files += 1;
         let path = e.path();
-        let Ok(f) = crate::io::open_ro(&path) else {
-            continue;
+        let header = crate::io::open_ro(&path).and_then(|f| read_vec(&f, 0, 16));
+        let h = match header {
+            Ok(h) => h,
+            Err(e) if is_lock_error(&e) => {
+                stats.locked += 1;
+                continue;
+            }
+            Err(_) => {
+                stats.unreadable += 1;
+                continue;
+            }
         };
-        let Ok(h) = read_vec(&f, 0, 16) else { continue };
         if h.len() == 16 && u32le(&h, 0) == BLOCK_MAGIC && i32le(&h, 12) == ENTRY_SIZE as i32 {
             out.push((sel, path));
         }
     }
+    stats.entry_files = out.len() as u32;
     out.sort();
     out
 }
@@ -212,14 +251,22 @@ pub fn parse_dir(dir: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<Blockfi
         dir,
         data: HashMap::new(),
     };
-    for (sel, path) in entry_block_files(dir) {
+    for (sel, path) in entry_block_files(dir, &mut scan.stats) {
         if cancelled() {
             break;
         }
         // Entry block files are metadata: read each once, whole.
-        let bytes = match std::fs::read(&path) {
+        let bytes = match crate::io::open_ro(&path).and_then(|f| {
+            let len = f.metadata()?.len() as usize;
+            read_vec(&f, 0, len)
+        }) {
             Ok(b) => b,
-            Err(_) => {
+            Err(e) => {
+                if is_lock_error(&e) {
+                    scan.stats.locked += 1;
+                } else {
+                    scan.stats.unreadable += 1;
+                }
                 scan.errors += 1;
                 continue;
             }
@@ -258,12 +305,50 @@ fn walk_file(
             i += 1;
             continue;
         }
+        scan.stats.blocks_allocated += 1;
         let off = BLOCK_HEADER_SIZE as usize + i * ENTRY_SIZE;
         match parse_entry(bytes, off, limit - i, sel, files, scan) {
             Some(blocks) => i += blocks.max(1),
             None => i += 1,
         }
     }
+}
+
+/// Key: inline (possibly spanning contiguous blocks) or via `long_key`. Returns the key and
+/// the number of blocks the entry spans.
+fn read_key(
+    bytes: &[u8],
+    off: usize,
+    blocks_left: usize,
+    sel: u8,
+    key_len: usize,
+    long_key: u32,
+    files: &mut Files,
+) -> Option<(String, usize)> {
+    if long_key == 0 {
+        let blocks = blocks_for_key(key_len);
+        if key_len > MAX_INTERNAL_KEY_LEN || blocks > blocks_left {
+            return None;
+        }
+        let k = bytes.get(off + KEY_OFFSET..off + KEY_OFFSET + key_len)?;
+        if !valid_key(k) {
+            return None;
+        }
+        return Some((String::from_utf8_lossy(k).into_owned(), blocks));
+    }
+    let addr = Addr::decode(long_key)?;
+    let k = match addr {
+        Addr::Block { file, start, .. } if file == sel => {
+            let o = BLOCK_HEADER_SIZE as usize + start as usize * ENTRY_SIZE;
+            bytes.get(o..o + key_len)?.to_vec()
+        }
+        _ => files.read(addr, key_len as u64)?,
+    };
+    let k = k.strip_suffix(b"\0").unwrap_or(&k);
+    if k.len() != key_len || !valid_key(k) {
+        return None;
+    }
+    Some((String::from_utf8_lossy(k).into_owned(), 1))
 }
 
 /// Validates and resolves the `EntryStore` at `off`. Returns the number of blocks it
@@ -284,49 +369,42 @@ fn parse_entry(
     let data_size = |n: usize| i32le(e, 40 + n * 4);
     let data_addr = |n: usize| u32le(e, 56 + n * 4);
 
-    if state != 0 || key_len <= 0 || key_len as usize > MAX_KEY_LEN {
+    let stats = &mut scan.stats;
+    if state != 0 {
+        stats.rej_state += 1;
+        return None;
+    }
+    if key_len <= 0 || key_len as usize > MAX_KEY_LEN {
+        stats.rej_key_len += 1;
         return None;
     }
     let key_len = key_len as usize;
-    let creation_time = base_time_to_unix_ms(i64::try_from(creation).ok()?)?;
-    let body_addr = Addr::decode(data_addr(1))?;
+    let Some(creation_time) = i64::try_from(creation).ok().and_then(base_time_to_unix_ms) else {
+        stats.rej_time += 1;
+        return None;
+    };
+    let body_addr = match Addr::decode(data_addr(1)) {
+        // Rankings blocks (36 B) never hold data.
+        Some(Addr::Block { block_size: 36, .. }) | None => {
+            stats.rej_body_addr += 1;
+            return None;
+        }
+        Some(a) => a,
+    };
     let body_size = data_size(1);
     if body_size <= 0 {
+        stats.rej_body_size += 1;
         return None;
     }
-    if let Addr::Block { block_size: 36, .. } = body_addr {
-        return None; // rankings blocks never hold data
-    }
 
-    // Key: inline (possibly spanning contiguous blocks) or via `long_key`.
-    let (key, blocks) = if long_key == 0 {
-        let blocks = blocks_for_key(key_len);
-        if key_len > MAX_INTERNAL_KEY_LEN || blocks > blocks_left {
-            return None;
-        }
-        let k = bytes.get(off + KEY_OFFSET..off + KEY_OFFSET + key_len)?;
-        if !valid_key(k) {
-            return None;
-        }
-        (String::from_utf8_lossy(k).into_owned(), blocks)
-    } else {
-        let addr = Addr::decode(long_key)?;
-        let k = match addr {
-            Addr::Block { file, start, .. } if file == sel => {
-                let o = BLOCK_HEADER_SIZE as usize + start as usize * ENTRY_SIZE;
-                bytes.get(o..o + key_len)?.to_vec()
-            }
-            _ => files.read(addr, key_len as u64)?,
-        };
-        let k = k.strip_suffix(b"\0").unwrap_or(&k);
-        if k.len() != key_len || !valid_key(k) {
-            return None;
-        }
-        if let Addr::External(n) = addr {
-            scan.referenced.insert(external_name(n));
-        }
-        (String::from_utf8_lossy(k).into_owned(), 1)
+    let Some((key, blocks)) = read_key(bytes, off, blocks_left, sel, key_len, long_key, files)
+    else {
+        scan.stats.rej_key += 1;
+        return None;
     };
+    if let Some(Addr::External(n)) = Addr::decode(long_key) {
+        scan.referenced.insert(external_name(n));
+    }
 
     // Reference every external stream so orphan detection skips them.
     for n in 0..4 {
@@ -338,9 +416,11 @@ fn parse_entry(
     let Some((body_path, body_offset, body_len, body_handle)) =
         files.locate(body_addr, body_size as u64)
     else {
+        scan.stats.body_missing += 1;
         scan.errors += 1;
         return Some(blocks);
     };
+    scan.stats.accepted += 1;
 
     let info = match (Addr::decode(data_addr(0)), data_size(0)) {
         (Some(a), s) if s > 0 => files

@@ -94,6 +94,14 @@
       </span>
     </div>
     <p class="status num" title={app.sources.map((s) => s.path).join('\n')}>{status}</p>
+    {#if app.scan.diagnostics && !scanning}
+    <button
+      class="btn ghost rescan"
+      onclick={() => app.copyDiagnostics()}
+      title="Copy counts from the last scan (no file names or links) to include in a bug report">
+      <Icon name="copy" size={16} />Copy scan details
+    </button>
+    {/if}
     {#if app.sources.length}
     <button class="btn ghost rescan" onclick={() => app.rescan()} title="Scan the cache again">
       <Icon name="refresh" size={16} />Rescan

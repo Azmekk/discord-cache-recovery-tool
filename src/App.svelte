@@ -2,6 +2,7 @@
   import Drawer from './components/Drawer.svelte';
   import Grid from './components/Grid.svelte';
   import Header from './components/Header.svelte';
+  import LockedNotice from './components/LockedNotice.svelte';
   import SelectionBar from './components/SelectionBar.svelte';
   import Sidebar from './components/Sidebar.svelte';
   import Toasts from './components/Toasts.svelte';
@@ -40,6 +41,9 @@
   <Sidebar />
   <main>
     <Header bind:searchEl />
+    {#if app.scan.phase === 'done' && app.scan.lockedSources.length}
+      <LockedNotice sources={app.scan.lockedSources} />
+    {/if}
     <div class="stage">
       <Grid />
       <SelectionBar />

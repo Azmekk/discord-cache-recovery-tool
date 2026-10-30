@@ -2,7 +2,8 @@
 // or the network: everything, including the images, is generated here.
 //
 // Scenarios via query string: ?mock=none (no Discord install), ?mock=empty (cache is empty),
-// ?mock=big (20,000 entries, for performance work). Add &slow=4 to stretch the scan.
+// ?mock=big (20,000 entries, for performance work), ?mock=locked (Discord is running, so the
+// index is locked). Add &slow=4 to stretch the scan.
 
 import type { Backend } from './api';
 import type { Entry, ScanEvent, Source } from './types';
@@ -354,7 +355,15 @@ export function createMockBackend(): Backend {
       if (token !== scanToken) return;
       onEvent({
         type: 'finished',
-        data: { count: entries.length, elapsedMs: Math.round(performance.now() - started), errors: entries.length ? 3 : 0 },
+        data: {
+          count: entries.length,
+          elapsedMs: Math.round(performance.now() - started),
+          errors: entries.length ? 3 : 0,
+          lockedSources: scenario === 'locked' ? sources.map((s) => s.label) : [],
+          diagnostics: `Discord Cache Recovery (mock)
+Scan: ${entries.length} files, ${entries.length ? 3 : 0} errors
+`,
+        },
       });
     },
 
