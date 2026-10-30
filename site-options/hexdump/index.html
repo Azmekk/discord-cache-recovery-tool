@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord Cache Recovery: get back deleted Discord images and GIFs</title>
+<meta name="description" content="A free, open-source desktop app that finds the images, GIFs, videos and emojis still sitting in Discord's local cache, and gives them back as real files with their original names and dates. Works offline on Windows, macOS and Linux.">
+<link rel="icon" href="../../site/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="../../site/downloads.js" defer></script>
+<style>
+  :root {
+    --slate: #141925;
+    --slate-2: #1A2030;
+    --raised: #212940;
+    --line: #2E3850;
+    --text: #E9EBF1;
+    --muted: #A2AABD;
+    --dim: #6A7490;
+    --amber: #F0B64A;
+    --amber-soft: rgba(240, 182, 74, .14);
+    --teal: #74CDBB;
+    --display: "Bricolage Grotesque", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --wrap: 1180px;
+    --gutter: clamp(16px, 4vw, 40px);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--slate);
+    color: var(--text);
+    font-family: var(--display);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    font-optical-sizing: auto;
+    overflow-x: hidden;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
+  .skip { position: absolute; left: -999px; top: 8px; background: var(--amber); color: var(--slate); padding: 8px 14px; border-radius: 6px; z-index: 10; }
+  .skip:focus { left: 8px; }
+  code { font-family: var(--mono); font-size: .9em; background: var(--raised); padding: .1em .4em; border-radius: 4px; overflow-wrap: anywhere; }
+
+  /* top bar */
+  .top { position: sticky; top: 0; z-index: 5; background: rgba(20, 25, 37, .86); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(46, 56, 80, .6); }
+  .top .wrap { display: flex; align-items: center; gap: 24px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+  .brand img { width: 28px; height: 28px; }
+  .top nav { margin-left: auto; display: flex; gap: 22px; align-items: center; font-size: .95rem; }
+  .top nav a { text-decoration: none; color: var(--muted); }
+  .top nav a:hover { color: var(--text); }
+  .top nav .gh { color: var(--text); border: 1px solid var(--line); padding: 6px 12px; border-radius: 8px; display: inline-flex; gap: 8px; align-items: center; }
+  .gh svg { width: 16px; height: 16px; fill: currentColor; }
+  @media (max-width: 720px) { .top nav .opt { display: none; } }
+  @media (max-width: 440px) { .top nav .dl { display: none; } .top .wrap { gap: 12px; } }
+
+  /* hero */
+  .hero { padding: clamp(40px, 7vw, 88px) 0 clamp(56px, 8vw, 104px); }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr); gap: clamp(32px, 5vw, 64px); align-items: center; }
+  h1 {
+    font-size: clamp(2.5rem, 4.6vw, 4.1rem);
+    line-height: .98;
+    letter-spacing: -.035em;
+    font-weight: 800;
+    margin: 0 0 24px;
+    font-variation-settings: "opsz" 96;
+  }
+  h1 .line { display: block; }
+  .lede { font-size: clamp(1.1rem, 1.6vw, 1.25rem); color: var(--muted); max-width: 34em; margin: 0 0 32px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; }
+  .btn {
+    display: inline-flex; flex-direction: column; align-items: flex-start;
+    background: var(--amber); color: #1A1406; text-decoration: none;
+    padding: 14px 24px 12px; border-radius: 12px;
+    box-shadow: 0 0 0 1px rgba(240,182,74,.4), 0 10px 30px -10px rgba(240,182,74,.55);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(240,182,74,.6), 0 14px 36px -10px rgba(240,182,74,.7); }
+  .btn .l { font-weight: 700; font-size: 1.1rem; display: flex; gap: 10px; align-items: center; }
+  .btn .l svg { width: 18px; height: 18px; }
+  .btn .d { font-size: .82rem; opacity: .78; min-height: 1.2em; }
+  .link-quiet { color: var(--muted); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; }
+  .link-quiet:hover { color: var(--text); text-decoration-color: var(--amber); }
+  .fine { margin-top: 20px; font-size: .9rem; color: var(--dim); }
+
+  /* hex viewer */
+  .stage { position: relative; min-width: 0; }
+  .viewer {
+    background: var(--slate-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -40px rgba(0,0,0,.8);
+  }
+  .vbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: .75rem; color: var(--dim); white-space: nowrap; overflow: hidden; }
+  .vbar .path { overflow: hidden; text-overflow: ellipsis; }
+  .vbar .path b { color: var(--muted); font-weight: 500; }
+  .vbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; box-shadow: 0 0 10px var(--amber); }
+  .dump {
+    --rows: 12;
+    --rh: 1.7em;
+    position: relative;
+    height: calc(var(--rows) * var(--rh));
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 0 14px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+            mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+  }
+  .rows { will-change: transform; }
+  .row { height: var(--rh); line-height: var(--rh); display: flex; gap: 1.3ch; white-space: pre; color: #8790A8; }
+  .row .off { color: var(--dim); }
+  .row .hex span { display: inline-block; width: 2ch; margin-right: .5ch; border-radius: 3px; transition: background-color .35s, color .35s; }
+  .row .hex span.mid { margin-right: 1.3ch; }
+  .row .asc { color: #6E7895; }
+  .row .asc span { transition: color .35s, background-color .35s; border-radius: 2px; }
+  .row .m { color: #9AA7C7; }
+  .row .k { color: #C9D0E0; }
+  .row .asc .k { color: #C9D0E0; }
+  .row .s, .row .s0 { color: var(--amber); }
+  .row .hex .lit { background: rgba(116, 205, 187, .16); color: var(--teal); }
+  .row .asc .lit { color: var(--teal); }
+  .row .hex .lit.s, .row .hex .lit.s0, .row .asc .lit.s, .row .asc .lit.s0 { background: var(--amber); color: #1A1406; }
+  .readhead { position: absolute; left: 0; right: 0; height: var(--rh); border-top: 1px solid rgba(240,182,74,.25); border-bottom: 1px solid rgba(240,182,74,.25); background: rgba(240,182,74,.05); pointer-events: none; }
+
+  /* recovered cards */
+  .rail { display: flex; gap: 14px; margin-top: 16px; min-height: 178px; }
+  .card {
+    flex: 0 0 auto; width: 176px;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px 6px 10px;
+    box-shadow: 0 18px 40px -22px rgba(0,0,0,.9);
+  }
+  .card .thumb { aspect-ratio: 16 / 10; border-radius: 6px; overflow: hidden; background: var(--slate); }
+  .card .thumb svg { width: 100%; height: 100%; display: block; }
+  .card .name { font-weight: 600; font-size: .9rem; margin: 8px 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta { font-size: .78rem; color: var(--muted); margin: 0 4px; }
+  .card.new { border-color: rgba(240,182,74,.7); }
+  .rail .card:nth-child(n+4) { display: none; }
+  @media (max-width: 1100px) and (min-width: 901px) { .rail .card:nth-child(n+3) { display: none; } }
+
+  /* sections */
+  section { padding: clamp(56px, 7vw, 96px) 0; scroll-margin-top: 64px; }
+  h2 { font-size: clamp(2rem, 3.6vw, 3rem); line-height: 1.05; letter-spacing: -.03em; font-weight: 800; margin: 0 0 18px; max-width: 18em; font-variation-settings: "opsz" 72; }
+  h3 { font-size: 1.15rem; letter-spacing: -.01em; margin: 0 0 6px; font-weight: 700; }
+  .intro { color: var(--muted); max-width: 38em; margin: 0 0 40px; font-size: 1.1rem; }
+  p { margin: 0 0 1em; }
+
+  /* screenshot */
+  .shot { padding-top: 0; }
+  .frame { position: relative; border-radius: 16px; padding: clamp(8px, 1.4vw, 14px); background: linear-gradient(180deg, #2A3450, #1A2030); border: 1px solid var(--line); box-shadow: 0 50px 120px -60px rgba(240,182,74,.35), 0 40px 80px -50px #000; }
+  .frame img { border-radius: 8px; width: 100%; height: auto; aspect-ratio: 1320 / 820; }
+  .shot-head { display: flex; justify-content: space-between; align-items: end; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+  .shot-head h2 { margin: 0; }
+  .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .toggle button { font: inherit; font-size: .9rem; color: var(--muted); background: none; border: 0; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+  .toggle button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+
+  /* recovers */
+  .kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .kind { padding: 22px 24px 22px 0; border-bottom: 1px solid var(--line); }
+  .kind p { color: var(--muted); margin: 0; font-size: .98rem; }
+  .sig { font-family: var(--mono); font-size: .78rem; color: var(--amber); display: block; margin-bottom: 8px; }
+  .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 56px; margin-top: 64px; }
+  .feature p { color: var(--muted); margin: 0; max-width: 32em; }
+
+  /* safety */
+  .safe { background: var(--slate-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .safe-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); align-items: start; }
+  .safe h2 { font-size: clamp(2.2rem, 4.4vw, 3.6rem); }
+  .ledger { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--slate); }
+  .ledger li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); align-items: start; }
+  .ledger li:last-child { border-bottom: 0; }
+  .ledger .ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px; }
+  .ledger .ic svg { width: 14px; height: 14px; }
+  .ledger .no .ic { background: rgba(162, 170, 189, .12); color: var(--muted); }
+  .ledger .yes { background: var(--amber-soft); }
+  .ledger .yes .ic { background: var(--amber); color: #1A1406; }
+  .ledger strong { display: block; font-weight: 600; }
+  .ledger span.s2 { color: var(--muted); font-size: .95rem; }
+
+  /* how */
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; counter-reset: s; }
+  .steps li { counter-increment: s; border-top: 2px solid var(--line); padding-top: 20px; }
+  .steps li::before { content: counter(s); font-weight: 800; font-size: 2.4rem; color: var(--amber); line-height: 1; display: block; margin-bottom: 14px; font-variation-settings: "opsz" 96; }
+  .steps p { color: var(--muted); margin: 0; }
+  .limits { margin-top: 48px; padding: 20px 24px; border-left: 3px solid var(--teal); background: rgba(116,205,187,.06); border-radius: 0 10px 10px 0; max-width: 52em; }
+  .limits p { margin: 0; color: var(--muted); }
+  .limits strong { color: var(--text); }
+
+  /* downloads */
+  .dl-head { display: flex; flex-wrap: wrap; gap: 20px 40px; align-items: end; justify-content: space-between; margin-bottom: 36px; }
+  .dl-head h2 { margin: 0; }
+  .ver { color: var(--muted); font-size: .95rem; }
+  .platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .platform { border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: var(--slate-2); }
+  .platform h3 { font-size: 1.3rem; margin-bottom: 14px; }
+  .platform ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .platform a { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 9px; background: var(--raised); text-decoration: none; border: 1px solid transparent; }
+  .platform a:hover { border-color: var(--amber); }
+  .platform a span:first-child { font-weight: 600; }
+  .platform a span:last-child { color: var(--muted); font-size: .85rem; text-align: right; }
+  .notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px; }
+  .note { padding: 18px 20px; border-radius: 12px; border: 1px dashed var(--line); }
+  .note p { color: var(--muted); margin: 0; font-size: .97rem; }
+  .note strong { color: var(--text); }
+
+  /* faq */
+  .faq-list { max-width: 820px; border-top: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { list-style: none; cursor: pointer; padding: 20px 40px 20px 0; font-weight: 600; font-size: 1.12rem; position: relative; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: ""; position: absolute; right: 6px; top: 50%; width: 10px; height: 10px; border-right: 2px solid var(--amber); border-bottom: 2px solid var(--amber); transform: translateY(-70%) rotate(45deg); transition: transform .2s; }
+  details[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
+  details p { color: var(--muted); margin: 0 0 22px; max-width: 42em; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--muted); font-size: .92rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 40px; justify-content: space-between; }
+  footer p { margin: 0 0 6px; }
+  footer a { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .hero .wrap { grid-template-columns: 1fr; }
+    .kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .features, .safe-grid, .notes { grid-template-columns: 1fr; }
+    .steps, .platforms { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .dump { font-size: 13px; padding: 0 12px; }
+    .row { gap: 2ch; }
+    .row .hex span { margin-right: .6ch; }
+    .kinds { grid-template-columns: 1fr; }
+    .rail { min-height: 160px; }
+    .card { width: calc(50% - 7px); }
+    .rail .card:nth-child(n+3) { display: none; }
+    .btn { width: 100%; }
+  }
+  @media (max-width: 380px) { .dump { font-size: 12px; } .row { gap: 1.4ch; } }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="../../site/icon.svg" alt="" width="28" height="28">Discord Cache Recovery</a>
+    <nav aria-label="Main">
+      <a class="opt" href="#recovers">What it finds</a>
+      <a class="opt" href="#safe">Safety</a>
+      <a class="opt" href="#faq">FAQ</a>
+      <a class="dl" href="#download">Download</a>
+      <a class="gh" href="https://github.com/Azmekk/discord-cache-recovery-tool"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div>
+        <h1 id="hero-title"><span class="line">Deleted on Discord.</span><span class="line">Still on your disk.</span></h1>
+        <p class="lede">Discord keeps a copy of the images, GIFs, videos and emojis you've seen. This free app finds them in that cache and gives them back as real files, with their original names and dates.</p>
+        <div class="cta">
+          <a class="btn" data-download="primary" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest">
+            <span class="l"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m-4.5-4.5L10 13l4.5-4.5M4 17h12"/></svg><span data-download-label>Download</span></span>
+            <span class="d" data-download-detail>All platforms on GitHub</span>
+          </a>
+          <a class="link-quiet" href="https://github.com/Azmekk/discord-cache-recovery-tool">View on GitHub</a>
+        </div>
+        <p class="fine">Free and open source. Works offline on Windows, macOS and Linux.</p>
+      </div>
+
+      <div class="stage" aria-label="Animation: a hex viewer scrolling through Discord's cache. When a file signature passes, the file is recovered as a card with its name and date." role="img">
+        <div class="viewer" aria-hidden="true">
+          <div class="vbar"><span class="dot"></span><span class="path">Discord/Cache/Cache_Data/<b id="fname">f_0003b7</b></span></div>
+          <div class="dump" id="dump">
+            <div class="readhead" id="readhead"></div>
+            <div class="rows" id="rows"></div>
+          </div>
+        </div>
+        <div class="rail" id="rail" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="shot" aria-labelledby="shot-title">
+    <div class="wrap">
+      <div class="shot-head">
+        <h2 id="shot-title">Everything it found, in one gallery you can search</h2>
+        <div class="toggle" role="group" aria-label="Screenshot theme">
+          <button type="button" aria-pressed="true" data-shot="../../site/screenshot.png">Dark</button>
+          <button type="button" aria-pressed="false" data-shot="../../site/screenshot-light.png">Light</button>
+        </div>
+      </div>
+      <div class="frame">
+        <img id="shot" src="../../site/screenshot.png" width="1320" height="820" loading="lazy" alt="The Discord Cache Recovery window: a sidebar of filters for kind, format, date and Discord install, and a grid of recovered images and GIFs with their file names.">
+      </div>
+    </div>
+  </section>
+
+  <section id="recovers" aria-labelledby="rec-title">
+    <div class="wrap">
+      <h2 id="rec-title">If you saw it in Discord, it might still be here</h2>
+      <p class="intro">Every time Discord shows you a picture, it saves a copy in a cache folder on your computer. That copy often stays behind after the message, link or favorite GIF is gone.</p>
+      <div class="kinds">
+        <div class="kind"><span class="sig">89 50 4E 47, FF D8 FF</span><h3>Attachments</h3><p>Photos, screenshots, videos and audio people posted, with their original file names.</p></div>
+        <div class="kind"><span class="sig">47 49 46 38 39 61</span><h3>GIFs from Tenor and Giphy</h3><p>Including the ones in your favorites tab whose links now show a broken image.</p></div>
+        <div class="kind"><span class="sig">52 49 46 46 … 57 45 42 50</span><h3>Emojis and stickers</h3><p>Even from servers you've since left.</p></div>
+        <div class="kind"><span class="sig">avatars/, icons/, banners/</span><h3>Avatars, server icons and banners</h3><p>Profile pictures and server art Discord loaded while you browsed.</p></div>
+        <div class="kind"><span class="sig">external/</span><h3>Link-preview embeds</h3><p>Images from link previews, shown with the original source link.</p></div>
+        <div class="kind"><span class="sig">00 00 00 20 66 74 79 70</span><h3>Videos and audio</h3><p>Clips that were played or previewed in a chat.</p></div>
+      </div>
+
+      <div class="features">
+        <div class="feature"><h3>Real names and links</h3><p>Attachments come back with the file name they were posted with. Every file shows the link it was downloaded from, so you can tell where it came from.</p></div>
+        <div class="feature"><h3>Dates you can trust</h3><p>See when an attachment was posted (worked out from Discord's message IDs) and when your Discord downloaded it.</p></div>
+        <div class="feature"><h3>Search and filter</h3><p>Search by name, link or channel ID. Filter by kind, format, date and Discord install. Give channels your own names to search by them.</p></div>
+        <div class="feature"><h3>One copy, the biggest one</h3><p>Discord caches the same image at several sizes. Group sizes keeps only the largest, so the gallery isn't full of duplicates.</p></div>
+        <div class="feature"><h3>Export with names and dates intact</h3><p>Save one file or a whole selection to any folder. Exported files keep their original name and date.</p></div>
+        <div class="feature"><h3>Every Discord, every desktop</h3><p>Discord, PTB, Canary and Development on Windows, macOS and Linux, including Flatpak and Snap. You can also open a cache folder copied from another computer.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="safe" id="safe" aria-labelledby="safe-title">
+    <div class="wrap safe-grid">
+      <div>
+        <h2 id="safe-title">It never touches your account</h2>
+        <p class="intro">The app only reads files Discord already stored on your computer. It works with your internet switched off, so nothing leaves your computer and Discord never hears from it.</p>
+        <p class="intro" style="margin-bottom:0">The full source code is on <a class="link-quiet" href="https://github.com/Azmekk/discord-cache-recovery-tool">GitHub</a> for anyone to read.</p>
+      </div>
+      <ul class="ledger">
+        <li class="yes"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span><span><strong>Reads the cache folder on your computer</strong><span class="s2">That's the only thing it does.</span></span></li>
+        <li class="no"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span><span><strong>Never logs in</strong><span class="s2">It doesn't ask for your password and has no sign-in screen.</span></span></li>
+        <li class="no"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span><span><strong>Never uses your account or token</strong><span class="s2">Your login stays yours alone.</span></span></li>
+        <li class="no"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span><span><strong>Never talks to Discord's servers</strong><span class="s2">Everything happens offline, on your machine.</span></span></li>
+        <li class="no"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span><span><strong>Never modifies Discord</strong><span class="s2">No plugins, no injected code, no changed files.</span></span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title">How it works</h2>
+      <p class="intro">No magic, and nothing you couldn't check yourself in the source.</p>
+      <ol class="steps">
+        <li><h3>Reads Discord's local cache</h3><p>It finds each Discord install on your computer and opens its HTTP cache folder. It reads just the start of each file to see what it is, so thousands of files take seconds.</p></li>
+        <li><h3>Pairs each file with its link and date</h3><p>The cache index stores the address every file was downloaded from and when. That's where the original file name and the posted date come from.</p></li>
+        <li><h3>Sorts it into a gallery</h3><p>The link tells it whether a file is an attachment, a GIF, an emoji or an avatar. Duplicate sizes get grouped, and you browse, search and export.</p></li>
+      </ol>
+      <div class="limits">
+        <p><strong>What it can't do.</strong> It only recovers what's still in the cache. Discord removes old entries as the cache fills up, and clearing the cache deletes everything. It also can't tell which server or favorites tab something came from, though attachments do include the channel ID.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="download" aria-labelledby="dl-title">
+    <div class="wrap">
+      <div class="dl-head">
+        <h2 id="dl-title">Download for your computer</h2>
+        <p class="ver">Latest release <span data-version></span> on <a class="link-quiet" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest">GitHub</a>. MIT licensed.</p>
+      </div>
+      <div class="platforms">
+        <div class="platform">
+          <h3>Windows</h3>
+          <ul>
+            <li><a data-download="windows-x64" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>64-bit</span><span>Most PCs</span></a></li>
+            <li><a data-download="windows-arm64" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>ARM64</span><span>Snapdragon PCs</span></a></li>
+          </ul>
+        </div>
+        <div class="platform">
+          <h3>macOS</h3>
+          <ul>
+            <li><a data-download="mac-arm64" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>Apple Silicon</span><span>M1 and later</span></a></li>
+            <li><a data-download="mac-x64" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>Intel</span><span>Older Macs</span></a></li>
+          </ul>
+        </div>
+        <div class="platform">
+          <h3>Linux</h3>
+          <ul>
+            <li><a data-download="linux-appimage" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>AppImage</span><span>Any distro, x64</span></a></li>
+            <li><a data-download="linux-appimage-arm64" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>AppImage ARM</span><span>Any distro, ARM64</span></a></li>
+            <li><a data-download="linux-deb" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>.deb</span><span>Debian, Ubuntu</span></a></li>
+            <li><a data-download="linux-rpm" href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest"><span>.rpm</span><span>Fedora, RHEL</span></a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><p><strong>Windows says "Windows protected your PC"?</strong> The app isn't code-signed yet, so Windows doesn't recognise it. Click <strong>More info</strong>, then <strong>Run anyway</strong>.</p></div>
+        <div class="note"><p><strong>macOS says the app is "damaged"?</strong> It isn't; macOS blocks unsigned apps this way. Open Terminal and run this once: <code>xattr -cr "/Applications/Discord Cache Recovery.app"</code></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <h2 id="faq-title">Questions people ask</h2>
+      <div class="faq-list">
+        <details><summary>Can this get my Discord account banned?</summary><p>It never logs in, never uses your account or token, never talks to Discord's servers and never changes the Discord app. It only reads files that are already on your computer, so there's nothing for Discord to see.</p></details>
+        <details><summary>Is it a virus? My antivirus or SmartScreen warned me.</summary><p>The warning appears because the builds aren't code-signed, not because anything harmful was found. The app is open source and built from the public code on GitHub, so you or anyone else can check exactly what it does.</p></details>
+        <details><summary>Why can't I find my GIF?</summary><p>It can only recover what's still in the cache. Discord deletes old entries as the cache fills up, and clearing the cache removes everything. If you haven't seen the GIF in Discord for a long time, it may already be gone. Try searching by part of its link, or filter by GIFs and sort by date.</p></details>
+        <details><summary>Can it tell me which server something came from?</summary><p>No. The cache doesn't record servers or which favorites tab a GIF was in. Attachments do include the channel ID, and you can give channels your own names to search by them.</p></details>
+        <details><summary>Does Discord need to be closed?</summary><p>Usually not. On Windows, if the app says the cache is locked, quit Discord fully from the tray icon (right-click, then Quit Discord) and scan again.</p></details>
+        <details><summary>My Mac says the app is "damaged". What now?</summary><p>That's how macOS treats apps that aren't signed. Open Terminal and run <code>xattr -cr "/Applications/Discord Cache Recovery.app"</code> once, then open the app normally.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <p>Discord Cache Recovery is free software under the MIT license.</p>
+      <p>Made by <a href="https://github.com/Azmekk">Azmek</a>. macOS testing by ggatesdew.</p>
+      <p>Not affiliated with or endorsed by Discord Inc.</p>
+    </div>
+    <div>
+      <p><a href="https://github.com/Azmekk/discord-cache-recovery-tool">Source code on GitHub</a></p>
+      <p><a href="https://github.com/Azmekk/discord-cache-recovery-tool/releases/latest">All releases</a></p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Screenshot theme toggle
+  const shot = document.getElementById('shot');
+  document.querySelectorAll('[data-shot]').forEach((b) => b.addEventListener('click', () => {
+    shot.src = b.dataset.shot;
+    document.querySelectorAll('[data-shot]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+  }));
+
+  // ---------- Hex viewer ----------
+  const dump = document.getElementById('dump');
+  const rowsEl = document.getElementById('rows');
+  const rail = document.getElementById('rail');
+  const readhead = document.getElementById('readhead');
+  const fnameEl = document.getElementById('fname');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const narrow = matchMedia('(max-width: 560px)');
+
+  const bytes = (s) => s.split(' ').map((h) => parseInt(h, 16));
+  const ascii = (s) => Array.from(s, (c) => c.charCodeAt(0));
+
+  // Each file: cache key, magic header, which header bytes are the signature, and its thumbnail.
+  const FILES = [
+    { key: 'https://cdn.discordapp.com/attachments/1029384/1162847/boss-fight.png', name: 'boss-fight.png', meta: 'posted Oct 3',
+      head: bytes('89 50 4E 47 0D 0A 1A 0A 00 00 00 0D 49 48 44 52 00 00 05 00 00 00 02 D0 08 06'), sig: [0, 8], art: 'boss' },
+    { key: 'https://media.tenor.com/x8Kq2bH/dancing-frog.gif', name: 'dancing-frog.gif', meta: 'Tenor GIF, saved Sep 18',
+      head: bytes('47 49 46 38 39 61 F4 01 F4 01 F7 00 00 21 FF 0B 4E 45 54 53 43 41 50 45 32 2E 30'), sig: [0, 6], art: 'frog' },
+    { key: 'https://cdn.discordapp.com/attachments/8472/9310/road-trip.jpg', name: 'road-trip.jpg', meta: 'posted Aug 21',
+      head: bytes('FF D8 FF E0 00 10 4A 46 49 46 00 01 01 00 00 48 00 48 00 00 FF DB 00 43'), sig: [0, 3], art: 'road' },
+    { key: 'https://cdn.discordapp.com/emojis/913726458.webp', name: '913726458.webp', meta: 'emoji, saved Jul 30',
+      head: bytes('52 49 46 46 3C 1A 00 00 57 45 42 50 56 50 38 58 0A 00 00 00 10 00 00 00'), sig: [[0, 4], [8, 12]], art: 'emoji' },
+    { key: 'https://cdn.discordapp.com/attachments/8472/9355/clutch-ace.mp4', name: 'clutch-ace.mp4', meta: 'posted Oct 11',
+      head: bytes('00 00 00 20 66 74 79 70 69 73 6F 6D 00 00 02 00 69 73 6F 6D 69 73 6F 32'), sig: [4, 12], art: 'clip' },
+  ];
+  const MAGIC = bytes('30 5C 72 A7 1B 6D FB FC'); // Chromium simple-cache entry magic
+
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const queue = [];
+  let fileIdx = 0, entryNo = 0;
+
+  function push(b, t = 'n', f = -1) { queue.push({ b, t, f }); }
+  function enqueueEntry() {
+    const f = entryNo++;
+    const file = FILES[fileIdx++ % FILES.length];
+    const n = 20 + Math.floor(rnd() * 30);
+    for (let i = 0; i < n; i++) push(rnd() < .25 ? 0 : Math.floor(rnd() * 256));
+    MAGIC.forEach((b) => push(b, 'm', f));
+    const k = ascii(file.key);
+    [k.length, 0, 0, 0].forEach((b) => push(b, 'm', f));
+    k.forEach((b) => push(b, 'k', f));
+    const ranges = Array.isArray(file.sig[0]) ? file.sig : [file.sig];
+    file.head.forEach((b, i) => {
+      const inSig = ranges.some(([a, z]) => i >= a && i < z);
+      push(b, i === ranges[0][0] ? 's0' : inSig ? 's' : 'n', f);
+    });
+    // remember the file on the first signature byte
+    for (let i = queue.length - file.head.length; i < queue.length; i++) if (queue[i].t === 's0') queue[i].file = file;
+    const tail = 24 + Math.floor(rnd() * 40);
+    for (let i = 0; i < tail; i++) push(Math.floor(rnd() * 256), 'n', -1);
+  }
+  function take(n) {
+    while (queue.length < n) enqueueEntry();
+    return queue.splice(0, n);
+  }
+
+  let BPR, ROWS, TRIG, rowH = 0, rowsData = [], rowEls = [], lineNo = 0, offset = 0;
+  const hex2 = (b) => b.toString(16).toUpperCase().padStart(2, '0');
+  const ch = (b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.');
+
+  function makeRow() {
+    const el = document.createElement('div');
+    el.className = 'row';
+    const off = document.createElement('span'); off.className = 'off';
+    const hex = document.createElement('span'); hex.className = 'hex';
+    const asc = document.createElement('span'); asc.className = 'asc';
+    const hs = [], as = [];
+    for (let i = 0; i < BPR; i++) {
+      const h = document.createElement('span'); if (i === BPR / 2 - 1 && BPR > 8) h.classList.add('mid');
+      hex.appendChild(h); hs.push(h);
+      const a = document.createElement('span'); asc.appendChild(a); as.push(a);
+    }
+    el.append(off, hex, asc);
+    el._ = { off, hs, as };
+    return el;
+  }
+  function paint(el, data, n) {
+    const { off, hs, as } = el._;
+    off.textContent = (n * BPR).toString(16).toUpperCase().padStart(BPR > 8 ? 8 : 6, '0');
+    for (let i = 0; i < BPR; i++) {
+      const d = data[i];
+      hs[i].textContent = hex2(d.b);
+      as[i].textContent = ch(d.b);
+      const c = d.t === 'n' ? '' : d.t;
+      hs[i].className = (i === BPR / 2 - 1 && BPR > 8 ? 'mid ' : '') + c;
+      as[i].className = c;
+      if (d.f >= 0) { hs[i].dataset.f = d.f; as[i].dataset.f = d.f; }
+      else { delete hs[i].dataset.f; delete as[i].dataset.f; }
+    }
+  }
+
+  function build() {
+    BPR = narrow.matches ? 8 : 16;
+    ROWS = 12;
+    TRIG = 7;
+    rowsEl.textContent = '';
+    rowEls = []; rowsData = [];
+    for (let i = 0; i < ROWS + 1; i++) {
+      const el = makeRow();
+      rowsEl.appendChild(el);
+      rowEls.push(el);
+      rowsData.push(take(BPR));
+      paint(el, rowsData[i], lineNo++);
+    }
+    rowH = rowEls[0].offsetHeight;
+    readhead.style.top = TRIG * rowH + 'px';
+    offset = 0;
+    rowsEl.style.transform = '';
+  }
+
+  function shift() {
+    const el = rowEls.shift();
+    rowsData.shift();
+    const data = take(BPR);
+    rowEls.push(el); rowsData.push(data);
+    rowsEl.appendChild(el);
+    paint(el, data, lineNo++);
+  }
+
+  function hitInTrigRow() {
+    // row index TRIG in the visible frame (after translate offset rounding)
+    const d = rowsData[TRIG];
+    return d && d.find((x) => x.t === 's0' && !x.done);
+  }
+
+  // ---------- thumbnails ----------
+  function art(kind) {
+    const s = {
+      boss: `<rect width="160" height="100" fill="#2B1B4A"/><rect y="78" width="160" height="22" fill="#1C1233"/>
+        <g fill="#E8577A"><rect x="64" y="30" width="32" height="8"/><rect x="56" y="38" width="48" height="24"/><rect x="60" y="62" width="10" height="14"/><rect x="90" y="62" width="10" height="14"/></g>
+        <rect x="66" y="44" width="8" height="8" fill="#FFE27A"/><rect x="86" y="44" width="8" height="8" fill="#FFE27A"/>
+        <rect x="22" y="84" width="16" height="12" fill="#7AD3FF"/><rect x="40" y="12" width="80" height="6" rx="2" fill="#3D2A63"/><rect x="40" y="12" width="52" height="6" rx="2" fill="#F0B64A"/>`,
+      frog: `<rect width="160" height="100" fill="#1E5F63"/><circle cx="80" cy="64" r="30" fill="#7FCF6A"/><circle cx="66" cy="40" r="11" fill="#7FCF6A"/><circle cx="94" cy="40" r="11" fill="#7FCF6A"/>
+        <circle cx="66" cy="40" r="5" fill="#13202A"/><circle cx="94" cy="40" r="5" fill="#13202A"/><path d="M66 70q14 10 28 0" stroke="#13202A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <rect x="118" y="8" width="32" height="16" rx="4" fill="#13202A" opacity=".75"/><text x="134" y="20" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="10" fill="#fff">GIF</text>`,
+      road: `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F38E5A"/><stop offset="1" stop-color="#F7D07A"/></linearGradient></defs>
+        <rect width="160" height="100" fill="url(#sky)"/><circle cx="112" cy="44" r="14" fill="#FFF1C9"/><path d="M0 64l34-22 26 16 30-26 34 24 36-18v62H0z" fill="#5A4A7A"/><path d="M0 76h160v24H0z" fill="#2F3950"/><path d="M72 100l6-24h4l6 24z" fill="#F0B64A" opacity=".8"/>`,
+      emoji: `<rect width="160" height="100" fill="#3A2F5C"/><circle cx="80" cy="50" r="34" fill="#FFCC4D"/><ellipse cx="68" cy="40" rx="5" ry="7" fill="#3B2A10"/><ellipse cx="92" cy="40" rx="5" ry="7" fill="#3B2A10"/><ellipse cx="80" cy="64" rx="11" ry="12" fill="#3B2A10"/>`,
+      clip: `<rect width="160" height="100" fill="#0F2A3A"/><path d="M0 70l40-12 30 10 40-20 50 14v38H0z" fill="#1E4A5E"/><circle cx="80" cy="46" r="17" fill="rgba(255,255,255,.9)"/><path d="M75 37l14 9-14 9z" fill="#0F2A3A"/><rect x="10" y="88" width="140" height="3" rx="1.5" fill="rgba(255,255,255,.25)"/><rect x="10" y="88" width="58" height="3" rx="1.5" fill="#F0B64A"/>`,
+    }[kind];
+    return `<svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${s}</svg>`;
+  }
+  function makeCard(file) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML = `<div class="thumb">${art(file.art)}</div><div class="name"></div><div class="meta"></div>`;
+    c.querySelector('.name').textContent = file.name;
+    c.querySelector('.meta').textContent = file.meta;
+    return c;
+  }
+
+  function recover(hit, animate) {
+    hit.done = true;
+    const f = hit.f;
+    dump.querySelectorAll(`[data-f="${f}"]`).forEach((s) => {
+      if (!s.classList.contains('n')) s.classList.add('lit');
+    });
+    fnameEl.textContent = 'f_' + (0x3b7 + f * 0x1d).toString(16).padStart(6, '0');
+    const file = hit.file;
+    const sigEl = dump.querySelector(`.hex .s0[data-f="${f}"]`);
+    const old = Array.from(rail.children);
+    const before = old.map((c) => c.getBoundingClientRect());
+    rail.querySelectorAll('.card.new').forEach((c) => c.classList.remove('new'));
+    const card = makeCard(file);
+    card.classList.add('new');
+    rail.prepend(card);
+    while (rail.children.length > 4) rail.lastElementChild.remove();
+    if (!animate || !sigEl) return;
+    old.forEach((c, i) => {
+      if (!c.isConnected) return;
+      const a = before[i], b = c.getBoundingClientRect();
+      c.animate([{ transform: `translateX(${a.left - b.left}px)` }, { transform: 'none' }], { duration: 600, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+    const s = sigEl.getBoundingClientRect(), r = card.getBoundingClientRect();
+    card.animate([
+      { transform: `translate(${s.left - r.left}px, ${s.top - r.top}px) scale(.14)`, opacity: 0, transformOrigin: '0 0' },
+      { opacity: 1, offset: .25 },
+      { transform: 'none', opacity: 1, transformOrigin: '0 0' },
+    ], { duration: 900, easing: 'cubic-bezier(.25,.9,.25,1)' });
+  }
+
+  // ---------- loop ----------
+  const SPEED = 6; // rows per second
+  let running = false, visible = true, last = 0, pauseUntil = 0, raf = 0;
+
+  function frame(t) {
+    raf = 0;
+    if (!running) return;
+    const dt = Math.min(0.05, (t - (last || t)) / 1000);
+    last = t;
+    if (t >= pauseUntil) {
+      offset += SPEED * rowH * dt;
+      while (offset >= rowH) {
+        offset -= rowH;
+        shift();
+        const hit = hitInTrigRow();
+        if (hit) { offset = 0; recover(hit, true); pauseUntil = t + 2200; break; }
+      }
+      rowsEl.style.transform = `translateY(${-offset}px)`;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  function update() {
+    const should = visible && !document.hidden && !reduce.matches;
+    if (should && !running) { running = true; last = 0; raf = requestAnimationFrame(frame); }
+    else if (!should && running) { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+  }
+  function staticFrame() {
+    // Reduced motion: show a frozen frame with one decoded signature and three recovered cards.
+    rail.textContent = '';
+    for (let guard = 0; guard < 400; guard++) {
+      shift();
+      const hit = hitInTrigRow();
+      if (hit) {
+        [2, 1].forEach((i) => rail.appendChild(makeCard(FILES[i])));
+        recover(hit, false);
+        break;
+      }
+    }
+    rowsEl.style.transform = '';
+  }
+
+  function start() {
+    queue.length = 0; seed = 7; fileIdx = 0; entryNo = 0; lineNo = 0; rail.textContent = '';
+    // lead-in so the first signature arrives after the viewer has filled
+    for (let i = 0; i < 200; i++) push(rnd() < .3 ? 0 : Math.floor(rnd() * 256));
+    build();
+    if (reduce.matches) staticFrame();
+    else [FILES[3], FILES[4]].forEach((f) => rail.appendChild(makeCard(f)));
+    update();
+  }
+
+  new IntersectionObserver((e) => { visible = e[0].isIntersecting; update(); }).observe(dump);
+  document.addEventListener('visibilitychange', update);
+  reduce.addEventListener('change', start);
+  narrow.addEventListener('change', start);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+})();
+</script>
+</body>
+</html>
