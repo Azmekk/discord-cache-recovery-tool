@@ -2,10 +2,11 @@
 
 # release.sh — Create and push a version tag to trigger a GitHub Actions release.
 #
-# This script tags the current commit with a version like v2.1.0 and pushes it.
+# This script tags the current commit with a version like v4.1.0 and pushes it.
+# The version must match "version" in src-tauri/tauri.conf.json.
 # GitHub Actions will then automatically:
-#   1. Build binaries for Windows, Linux, and macOS
-#   2. Create a GitHub Release with those binaries attached
+#   1. Build installers for Windows, macOS and Linux (x64 and ARM64)
+#   2. Publish a GitHub Release once every installer is attached
 #
 # Usage:
 #   ./release.sh v2.1.0
@@ -27,6 +28,14 @@ VERSION="$1"
 # Ensure the tag follows the v* convention (e.g. v2.1.0)
 if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Error: Version must match the pattern vMAJOR.MINOR.PATCH (e.g. v2.1.0)"
+  exit 1
+fi
+
+# The tag must match the app version, or the release workflow refuses to build
+APP_VERSION="v$(node -p "require('./src-tauri/tauri.conf.json').version")"
+if [ "$VERSION" != "$APP_VERSION" ]; then
+  echo "Error: $VERSION doesn't match the app version $APP_VERSION in src-tauri/tauri.conf.json."
+  echo "Bump \"version\" there, commit, then run this again."
   exit 1
 fi
 
